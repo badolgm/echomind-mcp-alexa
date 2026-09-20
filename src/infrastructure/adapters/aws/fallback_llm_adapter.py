@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -318,10 +319,12 @@ class ResilientLLMAdapter(LLMServicePort):
         fallback: LLMServicePort | None = None,
         *,
         cooldown_seconds: int = 300,
+        on_fallback: Callable[[], None] | None = None,
     ) -> None:
         self._primary = primary
         self._fallback = fallback if fallback is not None else RuleBasedLLMAdapter()
         self._cooldown_seconds = cooldown_seconds
+        self._on_fallback = on_fallback
         self._degraded = False
         self._degraded_until = 0.0
         self._stats = {"primary_attempts": 0, "fallback_calls": 0, "failovers": 0}
@@ -371,6 +374,8 @@ class ResilientLLMAdapter(LLMServicePort):
         self._degraded = True
         self._degraded_until = time.monotonic() + self._cooldown_seconds
         self._stats["failovers"] += 1
+        if self._on_fallback is not None:
+            self._on_fallback()
 
     def _recover(self) -> None:
         self._degraded = False

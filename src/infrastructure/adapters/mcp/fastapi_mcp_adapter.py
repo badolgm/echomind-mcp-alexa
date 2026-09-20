@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from typing import Any
 
@@ -41,6 +42,7 @@ from src.infrastructure.adapters.mcp.session_manager import (
     SessionManager,
     SessionStatus,
 )
+from src.infrastructure.config.telemetry import Telemetry
 
 JSON_RPC_VERSION = "2.0"
 MCP_PROTOCOL_VERSION = "2025-11-25"
@@ -142,11 +144,13 @@ class FastAPIMCPServer:
         session_manager: SessionManager | None = None,
         endpoint: str = DEFAULT_ENDPOINT,
         keepalive_seconds: int = 15,
+        telemetry: Telemetry | None = None,
     ) -> None:
         self._mcp_service = mcp_service
         self._session_manager = session_manager or SessionManager()
         self._endpoint = endpoint
         self._keepalive_seconds = keepalive_seconds
+        self._telemetry = telemetry or Telemetry()
         self.app = FastAPI(
             title=f"{SERVER_NAME} MCP Streamable HTTP", version=SERVER_VERSION
         )
@@ -213,7 +217,12 @@ class FastAPIMCPServer:
             return Response(
                 status_code=400, content="JSON-RPC payload must be an object."
             )
-        return await self._dispatch(payload, mcp_session_id, request)
+        method = payload.get("method") or "unknown"
+        started = time.perf_counter()
+        response = await self._dispatch(payload, mcp_session_id, request)
+        milliseconds = (time.perf_counter() - started) * 1000
+        self._telemetry.record_latency(method, milliseconds)
+        return response
 
     async def _dispatch(
         self,
@@ -334,6 +343,7 @@ class FastAPIMCPServer:
                 request_id, -32602, "tool arguments must be an object"
             )
         response = await self._mcp_service.call_tool(name, arguments)
+        self._telemetry.record_tool_call(name)
         result = {
             "content": [
                 {"type": item.kind, "text": item.data} for item in response.content

@@ -194,8 +194,8 @@ In-process round trips, Streamable HTTP over ASGI (development laptop):
 
 ## 10. Testing & quality gates
 
-- 65 tests across `tests/unit` (domain, use cases, adapters, fallback, ambient) and
-  `tests/integration` (SSE session lifecycle, composition smoke).
+- 74 tests across `tests/unit` (domain, use cases, adapters, fallback, ambient) and
+  `tests/integration` (SSE session lifecycle, composition smoke, telemetry, skill manifest).
 - All ports are mocked: suite runs offline.
 - Mandatory before completing any phase:
   ```powershell
@@ -207,14 +207,31 @@ In-process round trips, Streamable HTTP over ASGI (development laptop):
 ## 11. Production entry point
 
 `src/main.py` is the composition root (IoC): builds `ResilientLLMAdapter` → tool registry →
-`SessionManager` → `FastAPIMCPServer`, exposes `/health`, reads the environment (`ECHOMIND_*`),
-and serves via `python -m uvicorn src.main:app`. The same ASGI app can run on ECS/Fargate or AWS
-Lambda (Mangum-style wrapper) without code changes.
+`SessionManager` → `FastAPIMCPServer`, exposes `/health` and `/metrics`, reads the environment
+(`ECHOMIND_*`), and serves via `python -m uvicorn src.main:app`. The same ASGI app can run on
+ECS/Fargate, AWS Lambda (Mangum-style wrapper) or the provided multi-stage Docker image without
+code changes.
 
-## 12. Roadmap
+## 12. Observability & deployment
+
+- `src/infrastructure/config/telemetry.py` — dependency-free, thread-safe registry: request
+  latency percentiles (p50/p95/p99, nearest-rank), per-tool call counters and quota-fallback
+  activations. Instrumented at the MCP transport (method-level) and wired to the resilience layer
+  via a listener callback injected by the composition root.
+- `GET /metrics` returns the JSON snapshot; used by `run_demo.py` and any Prometheus/Grafana
+  scraper. `GET /health` feeds the Docker healthcheck.
+- `alexa_skill/skill.json` — Alexa+ Agent Skill manifest bound to `https://<host>/mcp`
+  (Streamable HTTP, protocol 2025-11-25, `Mcp-Session-Id` header) with camera/media permissions,
+  multimodal input and streaming event channels.
+- `Dockerfile` (multi-stage, `python:3.11-slim`) + `docker-compose.yml` (uvicorn, healthcheck,
+  environment-driven AWS config). `.dockerignore` keeps the image lean.
+- `.local/scripts/run_demo.py` boots the real server, replays fall/smoke/pet ambient events and
+  prints the telemetry report — the live QFP demonstration.
+
+## 13. Roadmap
 
 - [x] Phase 1 — Pure domain core, ports, use cases, adapters, unit tests.
 - [x] Phase 2 — Multimodal tools, dynamic registry, Bedrock Converse.
 - [x] Phase 3 — Persistent sessions, SSE, simulator, production entry.
 - [x] Phase 4 — Ambient awareness, Quota Fallback Protocol, master docs.
-- [ ] Phase 5 — Alexa+ skill, observability, deployment packaging.
+- [x] Phase 5 — Alexa+ skill manifest, observability, Docker packaging, demo runner.

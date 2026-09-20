@@ -95,9 +95,12 @@ declares its supported modalities. No media type leaks into the domain.
 │   │   └── use_cases/             # process_intent.py · process_multimodal_intent.py
 │   ├── infrastructure/adapters/
 │   │   ├── aws/                   # bedrock_adapter.py · fallback_llm_adapter.py
-│   │   └── mcp/                   # fastapi_mcp_adapter.py · session_manager.py
-│   │                              # tool_resolvers.py
+│   │   ├── mcp/                   # fastapi_mcp_adapter.py · session_manager.py
+│   │   │                          # tool_resolvers.py
+│   │   └── config/                # telemetry.py (p50/p95/p99 metrics)
 │   └── main.py                    # composition root (IoC) + uvicorn entry
+├── alexa_skill/skill.json         # Alexa+ Agent Skill manifest (MCP streamable)
+├── Dockerfile / docker-compose.yml
 └── tests/
     ├── unit/                      # domain, use cases, adapters, fallback
     └── integration/               # SSE session lifecycle, composition smoke
@@ -157,6 +160,49 @@ python .local/scripts/alexa_mcp_simulator.py --server http://localhost:8000 `
 python .local/scripts/alexa_mcp_simulator.py --server http://localhost:8000 --interactive
 ```
 
+### One-command demo with live metrics
+
+`run_demo.py` boots the server, replays ambient events (fall, smoke, lonely pet) through
+`analyze_ambient_stream` and prints the telemetry report:
+
+```powershell
+python .local/scripts/run_demo.py
+```
+
+It prints the MCP session handshake, the CRITICAL/MEDIUM verdicts and the `/metrics` report.
+
+### Observability
+
+`GET /metrics` exposes a dependency-free snapshot: uptime, per-tool call counts, quota-fallback
+activations and request latency percentiles (p50/p95/p99):
+
+```powershell
+curl http://localhost:8000/metrics
+```
+
+```json
+{
+  "uptime_seconds": 12.53,
+  "tool_calls": { "analyze_ambient_stream": 3 },
+  "total_tool_calls": 3,
+  "fallbacks_activated": 1,
+  "latency_ms": {
+    "tools/call": { "count": 3, "mean_ms": 0.96, "p50_ms": 0.15, "p95_ms": 2.62, "p99_ms": 2.62 }
+  }
+}
+```
+
+### Deploy with Docker
+
+```powershell
+docker compose up --build -d
+curl http://localhost:8000/health
+```
+
+The image is a multi-stage build on `python:3.11-slim` with a uvicorn healthcheck. In production
+inject AWS credentials via an IAM role (ECS/Fargate) or environment variables; the container runs
+the full Quota Fallback Protocol if they are absent.
+
 ### Configuration (environment variables)
 
 | Variable | Default | Purpose |
@@ -182,7 +228,7 @@ In-process round trips over the Streamable HTTP transport (this laptop, ASGI):
 ## Quality gates
 
 ```powershell
-pytest -q          # 65 tests
+pytest -q          # 74 tests
 flake8 src tests   # zero violations
 black --check src tests --line-length 88
 ```
@@ -195,7 +241,7 @@ black --check src tests --line-length 88
 - [x] **Phase 2** — Multimodal tools, dynamic MCP tool registry, Bedrock Converse blocks.
 - [x] **Phase 3** — Persistent sessions, SSE streaming, simulator, production entry point.
 - [x] **Phase 4** — Active Ambient Awareness tool, Quota Fallback Protocol, master docs.
-- [ ] **Phase 5** — Alexa+ skill integration, observability, deployment packaging.
+- [x] **Phase 5** — Alexa+ skill manifest, observability (`/metrics`), Docker packaging, demo runner.
 
 ---
 

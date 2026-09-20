@@ -1,0 +1,45 @@
+name: echomind-mcp-alexa
+
+services:
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: echomind-mcp-alexa:latest
+    container_name: echomind-mcp
+    restart: unless-stopped
+    ports:
+      - "${ECHOMIND_PORT:-8000}:8000"
+    environment:
+      ECHOMIND_BEDROCK_MODEL_ID: ${ECHOMIND_BEDROCK_MODEL_ID:-amazon.nova-micro-v1:0}
+      ECHOMIND_BEDROCK_REGION: ${ECHOMIND_BEDROCK_REGION:-us-east-1}
+      ECHOMIND_SESSION_IDLE_TIMEOUT: ${ECHOMIND_SESSION_IDLE_TIMEOUT:-300}
+      ECHOMIND_SSE_KEEPALIVE_SECONDS: ${ECHOMIND_SSE_KEEPALIVE_SECONDS:-15}
+      ECHOMIND_FALLBACK_COOLDOWN_SECONDS: ${ECHOMIND_FALLBACK_COOLDOWN_SECONDS:-300}
+      AWS_REGION: ${ECHOMIND_BEDROCK_REGION:-us-east-1}
+      # AWS credentials are injected at runtime. Prefer an IAM role (ECS/Fargate)
+      # or GitHub Actions OIDC; for local containers uncomment the mount below.
+      # AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?}
+      # AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Uncomment to mount local AWS credentials for a dev sandbox:
+    # volumes:
+    #   - ${HOME}/.aws:/root/.aws:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true

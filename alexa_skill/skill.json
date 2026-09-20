@@ -1,0 +1,128 @@
+{
+  "manifestVersion": "1.0",
+  "skill": {
+    "name": "EchoMind Alexa+ Agent",
+    "description": "Multimodal agentic ecosystem for Alexa+ powered by the Model Context Protocol (MCP) over HTTP Streamable transport. Provides ambient awareness and safety monitoring, camera/media understanding, document intelligence and productivity tools backed by Amazon Bedrock.",
+    "publishingInformation": {
+      "locales": {
+        "en-US": {
+          "name": "EchoMind Alexa+ Agent",
+          "summary": "Multimodal MCP agent for ambient awareness and home safety on Alexa+.",
+          "description": "EchoMind connects Alexa+ to a Bedrock-backed agentic MCP server: it analyzes live camera and media streams for falls, smoke and pet conditions, summarizes documents, schedules reminders and executes productivity tasks through a single Streamable HTTP endpoint.",
+          "keywords": ["MCP", "Alexa+", "ambient awareness", "home safety", "Bedrock", "multimodal"],
+          "examplePhrases": [
+            "Alexa, echo mind, is grandma okay in the living room?",
+            "Alexa, echo mind, check for smoke in the kitchen",
+            "Alexa, echo mind, summarize this document"
+          ]
+        }
+      },
+      "customEventsEnabled": true,
+      "isAvailableWorldwide": true,
+      "distributionMode": "PUBLIC",
+      "testingInstructions": "Run the demo with `python .local/scripts/run_demo.py`, then point the skill endpoint at the MCP Streamable HTTP URL and validate initialize, tools/list and tools/call via the Alexa+ agent simulator.",
+      "category": "SMART_HOME",
+      "privacyPolicyUrl": "https://<host>/privacy",
+      "termsOfUseUrl": "https://<host>/terms"
+    },
+    "apis": {
+      "mcp": {
+        "type": "agent",
+        "protocol": "streamable-http",
+        "protocolVersion": "2025-11-25",
+        "transport": {
+          "uri": "https://<host>/mcp",
+          "method": "POST",
+          "accepts": ["application/json", "text/event-stream"],
+          "session": {
+            "header": "Mcp-Session-Id",
+            "idleTimeoutSeconds": 300,
+            "serverInitiatedStream": true,
+            "keepalive": {
+              "enabled": true,
+              "intervalSeconds": 15,
+              "format": "sse-comment"
+            }
+          }
+        },
+        "capabilities": {
+          "tools": { "listChanged": false },
+          "notifications": ["initialized"],
+          "jsonRpcVersion": "2.0"
+        },
+        "modes": {
+          "multimodal": {
+            "input": ["image", "video_frames", "text"],
+            "attachmentSupport": "base64",
+            "recognizedTools": ["analyze_ambient_stream", "analyze_image", "analyze_document"]
+          },
+          "streamingResponses": {
+            "enabled": true,
+            "eventChannels": ["message", "endpoint", "keep-alive"]
+          }
+        },
+        "authentication": {
+          "source": "alexa_agent_runtime",
+          "clientCredentials": "environment",
+          "awsIamRoleAssociation": true,
+          "fallbackProtocol": {
+            "onQuotaExceeded": "local-rule-engine",
+            "transparent": true,
+            "availabilityObjective": "24-7"
+          }
+        }
+      }
+    },
+    "permissions": [
+      { "name": "alexa::devices:all:cluster:camera:view" },
+      { "name": "alexa::devices:all:cluster:camera:capture" },
+      { "name": "alexa::devices:all:cluster:mediaStreaming" },
+      { "name": "alexa::devices:all:cluster:audioCapture" },
+      { "name": "alexa::devices:all:cluster:notification" }
+    ],
+    "events": {
+      "endpoint": { "uri": "https://<host>/mcp", "sslCertificateType": "Wildcard" },
+      "requests": {
+        "types": [
+          "AlexaPresentation.EventAnnouncements",
+          "Alexa.Device.Environment.Sensor"
+        ],
+        "streaming": {
+          "enabled": true,
+          "transport": "mcp-streamable-http",
+          "session": "managed-by-server"
+        }
+      },
+      "skillEvents": [
+        { "name": "SKILL_ENABLED" },
+        { "name": "SKILL_DISABLED" },
+        { "name": "SKILL_PERMISSION_ACCEPTED" },
+        { "name": "SKILL_PERMISSION_CHANGED" }
+      ]
+    },
+    "multimodal": {
+      "deviceSupport": {
+        "enabledDevices": ["Echo Hub", "Echo Show", "Fire TV", "Alexa+ mobile"],
+        "cameraAccess": "with-consent",
+        "mediaInput": {
+          "image": { "mimeTypes": ["image/jpeg", "image/png", "image/webp"] },
+          "video": { "frameExtraction": true, "maxFps": 1 },
+          "audio": { "transcription": true }
+        }
+      }
+    },
+    "privacyAndCompliance": {
+      "usesPersonalInfo": true,
+      "isChildDirected": false,
+      "allowsPurchases": false,
+      "containsAds": false,
+      "dataHandling": {
+        "localProcessing": {
+          "quotaFallbackEngine": "deterministic-rule-based",
+          "noDataLeavesDeviceDuringFallback": true
+        },
+        "retentionDays": 7
+      }
+    }
+  }
+}

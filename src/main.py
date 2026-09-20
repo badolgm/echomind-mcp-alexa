@@ -1,14 +1,15 @@
 """Application entry point: hexagonal composition root.
 
-Wires the concrete adapters (Bedrock, tool resolvers, session manager) into
-the FastAPI MCP server and exposes the resulting application to uvicorn.
+Wires the concrete adapters (Bedrock, fallback engine, tool resolvers, session
+manager, telemetry) into the FastAPI MCP server and exposes the resulting
+application to uvicorn.
 
 Run locally with::
 
     python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 
 Configuration is read from environment variables so the same binary can run
-in AWS Lambda (via ASGI wrapper), ECS/Fargate or a local sandbox.
+in AWS Lambda (via ASGI wrapper), ECS/Fargate or a Docker container.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from src.infrastructure.adapters.mcp.session_manager import SessionManager
 from src.infrastructure.adapters.mcp.tool_resolvers import (
     build_agentic_tool_registry,
 )
+from src.infrastructure.config.telemetry import Telemetry
 
 _ENV_MODEL_ID = "ECHOMIND_BEDROCK_MODEL_ID"
 _ENV_REGION = "ECHOMIND_BEDROCK_REGION"
@@ -36,6 +38,7 @@ _ENV_KEEPALIVE = "ECHOMIND_SSE_KEEPALIVE_SECONDS"
 _ENV_FALLBACK_COOLDOWN = "ECHOMIND_FALLBACK_COOLDOWN_SECONDS"
 
 HEALTH_ROUTE = "/health"
+METRICS_ROUTE = "/metrics"
 
 
 def _read_env_int(name: str, default: int) -> int:
@@ -50,8 +53,10 @@ def compose() -> FastAPI:
 
     The LLM port is wrapped in the resilient adapter so Bedrock quota or
     credit failures fail over transparently to the local rule engine without
-    breaking the MCP/Alexa+ session.
+    breaking the MCP/Alexa+ session. The telemetry registry observes the MCP
+    server (latency, tool calls) and listens for fallback activations.
     """
+    telemetry = Telemetry()
     llm_service = ResilientLLMAdapter(
         primary=BedrockLLMAdapter(
             model_id=os.environ.get(_ENV_MODEL_ID, "amazon.nova-micro-v1:0"),
@@ -59,6 +64,7 @@ def compose() -> FastAPI:
         ),
         fallback=RuleBasedLLMAdapter(),
         cooldown_seconds=_read_env_int(_ENV_FALLBACK_COOLDOWN, 300),
+        on_fallback=telemetry.fallback_listener,
     )
     mcp_service = build_agentic_tool_registry(llm_service)
     session_manager = SessionManager(
@@ -68,14 +74,25 @@ def compose() -> FastAPI:
         mcp_service=mcp_service,
         session_manager=session_manager,
         keepalive_seconds=_read_env_int(_ENV_KEEPALIVE, 15),
+        telemetry=telemetry,
     )
     app = server.app
     app.add_api_route(HEALTH_ROUTE, _health, methods=["GET"])
+    app.add_api_route(METRICS_ROUTE, _metrics(telemetry), methods=["GET"])
     return app
 
 
 async def _health() -> dict[str, str]:
     return {"status": "ok", "transport": "mcp/streamable-http"}
+
+
+def _metrics(telemetry: Telemetry):
+    """Return a route handler exposing the telemetry snapshot as JSON."""
+
+    async def handler() -> dict:
+        return telemetry.snapshot()
+
+    return handler
 
 
 app = compose()
