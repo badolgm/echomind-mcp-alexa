@@ -21,6 +21,7 @@ class ToolCategory(Enum):
     PRODUCTIVITY = "productivity"
     KNOWLEDGE = "knowledge"
     COMMUNICATION = "communication"
+    SAFETY = "safety"
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,8 +149,45 @@ SCHEDULE_REMINDER = AgentTool(
     supported_modalities=frozenset({Modality.TEXT}),
 )
 
+ANALYZE_AMBIENT_STREAM = AgentTool(
+    name="analyze_ambient_stream",
+    description=(
+        "Continuously monitor a home or environment snapshot (elder fall "
+        "detection, unattended pets, smoke/fire, intrusions or security "
+        "anomalies) and return a risk-graded ambient awareness report."
+    ),
+    category=ToolCategory.SAFETY,
+    input_schema=_schema(
+        required=["observation"],
+        properties={
+            "location": {
+                "type": "string",
+                "description": "Physical zone being observed, e.g. living room.",
+            },
+            "timestamp": {
+                "type": "string",
+                "description": "ISO-8601 timestamp of the snapshot.",
+            },
+            "observation": {
+                "type": "string",
+                "description": (
+                    "Natural-language or sensor description of the current state."
+                ),
+            },
+            "attachment": {
+                "type": "object",
+                "description": "Optional media payload: {mimeType, dataBase64}.",
+            },
+        },
+    ),
+    supported_modalities=frozenset(
+        {Modality.TEXT, Modality.IMAGE, Modality.VIDEO, Modality.AUDIO}
+    ),
+)
+
 AGENTIC_TOOL_CATALOG: tuple[AgentTool, ...] = (
     ANALYZE_IMAGE_CONTEXT,
     SUMMARIZE_DOCUMENT,
     SCHEDULE_REMINDER,
+    ANALYZE_AMBIENT_STREAM,
 )

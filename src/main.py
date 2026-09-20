@@ -19,6 +19,10 @@ import uvicorn
 from fastapi import FastAPI
 
 from src.infrastructure.adapters.aws.bedrock_adapter import BedrockLLMAdapter
+from src.infrastructure.adapters.aws.fallback_llm_adapter import (
+    ResilientLLMAdapter,
+    RuleBasedLLMAdapter,
+)
 from src.infrastructure.adapters.mcp.fastapi_mcp_adapter import FastAPIMCPServer
 from src.infrastructure.adapters.mcp.session_manager import SessionManager
 from src.infrastructure.adapters.mcp.tool_resolvers import (
@@ -29,6 +33,7 @@ _ENV_MODEL_ID = "ECHOMIND_BEDROCK_MODEL_ID"
 _ENV_REGION = "ECHOMIND_BEDROCK_REGION"
 _ENV_IDLE_TIMEOUT = "ECHOMIND_SESSION_IDLE_TIMEOUT"
 _ENV_KEEPALIVE = "ECHOMIND_SSE_KEEPALIVE_SECONDS"
+_ENV_FALLBACK_COOLDOWN = "ECHOMIND_FALLBACK_COOLDOWN_SECONDS"
 
 HEALTH_ROUTE = "/health"
 
@@ -41,10 +46,19 @@ def _read_env_int(name: str, default: int) -> int:
 
 
 def compose() -> FastAPI:
-    """Build the application graph starting from the environment."""
-    llm_service = BedrockLLMAdapter(
-        model_id=os.environ.get(_ENV_MODEL_ID, "amazon.nova-micro-v1:0"),
-        region_name=os.environ.get(_ENV_REGION, "us-east-1"),
+    """Build the application graph starting from the environment.
+
+    The LLM port is wrapped in the resilient adapter so Bedrock quota or
+    credit failures fail over transparently to the local rule engine without
+    breaking the MCP/Alexa+ session.
+    """
+    llm_service = ResilientLLMAdapter(
+        primary=BedrockLLMAdapter(
+            model_id=os.environ.get(_ENV_MODEL_ID, "amazon.nova-micro-v1:0"),
+            region_name=os.environ.get(_ENV_REGION, "us-east-1"),
+        ),
+        fallback=RuleBasedLLMAdapter(),
+        cooldown_seconds=_read_env_int(_ENV_FALLBACK_COOLDOWN, 300),
     )
     mcp_service = build_agentic_tool_registry(llm_service)
     session_manager = SessionManager(

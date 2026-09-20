@@ -35,7 +35,17 @@ _MEDIA_PROMPTS: dict[str, str] = {
     ),
 }
 
+_AMBIENT_PROMPT = (
+    "You are the Ambient Awareness module of a proactive care ecosystem for "
+    "Alexa+. Analyze the given home snapshot looking for: elder falls or "
+    "immobility, unattended pets, smoke or fire, intrusions and security "
+    "anomalies. Answer with (1) a short narrative of what is happening, "
+    "(2) a risk assessment in LOW/MEDIUM/HIGH/CRITICAL, and (3) a concrete "
+    "recommended action for Alexa+."
+)
+
 _REMINDER_TOOL_NAME = "schedule_reminder"
+_AMBIENT_TOOL_NAME = "analyze_ambient_stream"
 
 _DOCUMENT_MIME_HINTS = (
     "application/pdf",
@@ -97,6 +107,151 @@ def build_media_resolver(
         return MCPResponse(content=(MCPContentItem(kind="text", data=response.text),))
 
     return resolve
+
+
+@dataclass(frozen=True, slots=True)
+class AmbientVerdict:
+    """Deterministic safety-gate verdict computed without any LLM."""
+
+    risk_level: str
+    signals: tuple[str, ...]
+    recommendation: str
+
+
+_CRITICAL_RULES: tuple[tuple[str, str], ...] = (
+    ("fall", "possible fall"),
+    ("fell", "possible fall"),
+    ("collapse", "collapse"),
+    ("collapsed", "collapse"),
+    ("lying on the floor", "person on the floor"),
+    ("not moving", "immobility"),
+    ("immobile", "immobility"),
+    ("unconscious", "unconscious person"),
+    ("does not respond", "person not responding"),
+    ("smoke", "smoke indicators"),
+    ("fire", "fire indicators"),
+    ("flame", "flames"),
+    ("burning", "burning"),
+)
+_HIGH_RULES: tuple[tuple[str, str], ...] = (
+    ("intrusion", "intrusion"),
+    ("intruder", "intruder"),
+    ("stranger", "unknown person"),
+    ("unknown person", "unknown person"),
+    ("break-in", "forced entry"),
+    ("forced entry", "forced entry"),
+)
+_MEDIUM_RULES: tuple[tuple[str, str], ...] = (
+    ("unattended pet", "unattended pet"),
+    ("whining", "pet distress"),
+    ("pet", "pet condition"),
+    ("dog", "dog condition"),
+    ("cat", "cat condition"),
+)
+
+_RISK_RECOMMENDATIONS: dict[str, str] = {
+    "CRITICAL": (
+        "Contact emergency services immediately and open a voice escalation "
+        "channel to a caregiver."
+    ),
+    "HIGH": ("Alert the household and capture additional context before acting."),
+    "MEDIUM": "Schedule a follow-up check within 15 minutes.",
+    "LOW": "No immediate action required; keep monitoring the snapshot stream.",
+}
+
+
+def scan_ambient_signals(text: str) -> AmbientVerdict:
+    """Deterministically grade a snapshot against the safety rule base."""
+    normalized = text.lower()
+    for risk, rules in (
+        ("CRITICAL", _CRITICAL_RULES),
+        ("HIGH", _HIGH_RULES),
+        ("MEDIUM", _MEDIUM_RULES),
+    ):
+        signals = tuple(label for keyword, label in rules if keyword in normalized)
+        if signals:
+            return AmbientVerdict(
+                risk_level=risk,
+                signals=signals,
+                recommendation=_RISK_RECOMMENDATIONS[risk],
+            )
+    return AmbientVerdict(
+        risk_level="LOW",
+        signals=(),
+        recommendation=_RISK_RECOMMENDATIONS["LOW"],
+    )
+
+
+def build_ambient_resolver(llm_service: LLMServicePort) -> ToolHandler:
+    """Return the Ambient Awareness resolver for continuous home monitoring.
+
+    A deterministic safety gate always grades the snapshot first; the LLM
+    (primary or fallback) then provides the narrative. Critical signals are
+    therefore reported even when the remote model is unavailable.
+    """
+
+    async def resolve(arguments: Mapping[str, Any]) -> MCPResponse:
+        observation = str(arguments.get("observation") or "").strip()
+        if not observation:
+            return _error_response("the 'observation' argument is required")
+        location = str(arguments.get("location") or "home").strip()
+        timestamp = str(
+            arguments.get("timestamp") or datetime.now(timezone.utc).isoformat()
+        )
+        verdict = scan_ambient_signals(f"{location} {observation}")
+        grounding = (
+            f"- location: {location}\n"
+            f"- timestamp: {timestamp}\n"
+            f"- observation: {observation}"
+        )
+        request = _ambient_llm_request(grounding, arguments.get("attachment"))
+        if request is None:
+            return _error_response(
+                "the attachment 'dataBase64' value is not valid base64"
+            )
+        response = await llm_service.generate(request)
+        report = (
+            "AMBIENT AWARENESS REPORT\n"
+            f"- location: {location}\n"
+            f"- timestamp: {timestamp}\n"
+            f"- safety gate risk: {verdict.risk_level}\n"
+            f"- safety signals: {', '.join(verdict.signals) or 'none detected'}\n"
+            f"- safety gate recommendation: {verdict.recommendation}\n"
+            f"- model analysis: {response.text}"
+        )
+        return MCPResponse(content=(MCPContentItem(kind="text", data=report),))
+
+    return resolve
+
+
+def _ambient_llm_request(grounding: str, raw_attachment: object) -> LLMRequest | None:
+    if not isinstance(raw_attachment, dict):
+        return LLMRequest(
+            system_prompt=_AMBIENT_PROMPT,
+            user_prompt=grounding,
+            temperature=0.2,
+            max_tokens=512,
+        )
+    try:
+        data = base64.b64decode(str(raw_attachment.get("dataBase64", "")))
+    except Base64Error:
+        return None
+    if not data:
+        return None
+    mime_type = str(raw_attachment.get("mimeType", "application/octet-stream"))
+    return LLMRequest(
+        system_prompt=_AMBIENT_PROMPT,
+        user_prompt=grounding,
+        temperature=0.2,
+        max_tokens=512,
+        attachments=(
+            MultimodalAttachment(
+                kind=modality_for_mime(mime_type),
+                mime_type=mime_type,
+                data=data,
+            ),
+        ),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +327,10 @@ def build_agentic_tool_registry(llm_service: LLMServicePort) -> InMemoryMCPServe
         elif agent_tool.name == _REMINDER_TOOL_NAME:
             registry.register_agent_tool(
                 agent_tool, build_reminder_resolver(reminder_book)
+            )
+        elif agent_tool.name == _AMBIENT_TOOL_NAME:
+            registry.register_agent_tool(
+                agent_tool, build_ambient_resolver(llm_service)
             )
         else:
             registry.register_agent_tool(agent_tool, _echo_resolver)
