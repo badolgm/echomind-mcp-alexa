@@ -181,6 +181,22 @@ async def test_rule_engine_grades_ambient_critical_signals() -> None:
 
 
 @pytest.mark.asyncio
+async def test_rule_engine_does_not_false_positive_on_labels() -> None:
+    engine = RuleBasedLLMAdapter()
+    response = await engine.generate(
+        LLMRequest(
+            system_prompt="ambient monitoring prompt",
+            user_prompt=(
+                "- location: patio\n" "- observation: package dropped by a delivery box"
+            ),
+        )
+    )
+    assert "MEDIUM" not in response.text
+    assert "pet condition" not in response.text.lower()
+    assert "LOW" in response.text
+
+
+@pytest.mark.asyncio
 async def test_rule_engine_emits_json_classification_when_asked() -> None:
     engine = RuleBasedLLMAdapter()
     response = await engine.generate(

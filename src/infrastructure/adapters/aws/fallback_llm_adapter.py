@@ -16,6 +16,7 @@ summarisation and productivity requests.
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -77,6 +78,18 @@ def is_quota_error(exc: BaseException) -> bool:
         status = (response.get("ResponseMetadata") or {}).get("HTTPStatusCode")
         return code in _QUOTA_ERROR_CODES or status in _TRANSIENT_HTTP_STATUS
     return isinstance(exc, _TRANSIENT_AWS_ERRORS)
+
+
+def _keyword_in_text(keyword: str, text: str) -> bool:
+    """Match single-word keywords as whole words, phrases as substrings.
+
+    Substring matching would false-positive on embedded tokens such as ``cat``
+    inside ``location``; whole-word matching for single tokens avoids that
+    while multi-word phrases keep their substring semantics.
+    """
+    if " " in keyword:
+        return keyword in text
+    return keyword in re.findall(r"[a-z0-9]+", text)
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,13 +215,14 @@ class RuleBasedLLMAdapter(LLMServicePort):
     def evaluate(self, request: LLMRequest) -> dict[str, Any]:
         """Build a structured, deterministic decision for the request."""
         text = self._grounding_text(request)
+        subject = request.user_prompt.lower()
         if any(hint in text for hint in _CLASSIFY_HINTS):
             return self._classify(request.user_prompt)
         for risk, rules in _RULES_BY_PRIORITY:
             matched = tuple(
                 (rule.label, rule.summary, rule.recommendation)
                 for rule in rules
-                if any(keyword in text for keyword in rule.keywords)
+                if any(_keyword_in_text(keyword, subject) for keyword in rule.keywords)
             )
             if matched:
                 return self._ambient_verdict(matched, risk)

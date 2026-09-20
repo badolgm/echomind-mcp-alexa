@@ -9,10 +9,11 @@ infrastructure adapter serves both the tool registry and the multimodal flow.
 from __future__ import annotations
 
 import base64
+import re
 from binascii import Error as Base64Error
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 from uuid import uuid4
 
 from src.domain.models.intent import Modality
@@ -23,6 +24,12 @@ from src.infrastructure.adapters.mcp.fastapi_mcp_adapter import (
     InMemoryMCPServer,
     ToolHandler,
 )
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.iot.vivotek_adapter import (
+        CameraFrame,
+        CameraFrameSource,
+    )
 
 _MEDIA_PROMPTS: dict[str, str] = {
     "analyze_image_context": (
@@ -159,6 +166,59 @@ _RISK_RECOMMENDATIONS: dict[str, str] = {
     "LOW": "No immediate action required; keep monitoring the snapshot stream.",
 }
 
+_DETECTION_TERMS: tuple[tuple[str, tuple[str, ...], float], ...] = (
+    (
+        "FALL DETECTED",
+        (
+            "fallen",
+            "fell",
+            "falling",
+            "immobile",
+            "on the floor",
+            "down on the floor",
+        ),
+        0.93,
+    ),
+    ("SMOKE", ("smoke", "smokey"), 0.95),
+    ("FIRE", ("fire", "flame", "flaming", "burning"), 0.96),
+    (
+        "PERSON",
+        (
+            "person",
+            "human",
+            "someone",
+            "elderly",
+            "elder",
+            "man",
+            "woman",
+            "grandma",
+            "grandpa",
+        ),
+        0.88,
+    ),
+    ("PET", ("pet", "dog", "cat", "animal"), 0.90),
+    ("PACKAGE", ("package", "parcel", "box"), 0.80),
+    ("LAPTOP", ("laptop", "computer"), 0.75),
+    (
+        "INTRUDER",
+        ("intruder", "stranger", "intrusion", "unknown person", "break-in"),
+        0.90,
+    ),
+)
+
+
+def extract_detections(text: str) -> tuple[dict[str, object], ...]:
+    """Derive predicted detections from the ambient analysis text."""
+    normalized = text.lower()
+    tokens = re.findall(r"[a-z0-9]+", normalized)
+    detections = []
+    for label, terms, confidence in _DETECTION_TERMS:
+        if any(
+            term in tokens if " " not in term else term in normalized for term in terms
+        ):
+            detections.append({"label": label, "confidence": confidence})
+    return tuple(detections)
+
 
 def scan_ambient_signals(text: str) -> AmbientVerdict:
     """Deterministically grade a snapshot against the safety rule base."""
@@ -182,12 +242,18 @@ def scan_ambient_signals(text: str) -> AmbientVerdict:
     )
 
 
-def build_ambient_resolver(llm_service: LLMServicePort) -> ToolHandler:
+def build_ambient_resolver(
+    llm_service: LLMServicePort,
+    camera: CameraFrameSource | None = None,
+) -> ToolHandler:
     """Return the Ambient Awareness resolver for continuous home monitoring.
 
     A deterministic safety gate always grades the snapshot first; the LLM
     (primary or fallback) then provides the narrative. Critical signals are
-    therefore reported even when the remote model is unavailable.
+    therefore reported even when the remote model is unavailable. When a
+    camera frame source is supplied and no explicit media attachment is given,
+    the latest live frame is attached automatically so Bedrock can ground its
+    analysis on the current view.
     """
 
     async def resolve(arguments: Mapping[str, Any]) -> MCPResponse:
@@ -204,7 +270,10 @@ def build_ambient_resolver(llm_service: LLMServicePort) -> ToolHandler:
             f"- timestamp: {timestamp}\n"
             f"- observation: {observation}"
         )
-        request = _ambient_llm_request(grounding, arguments.get("attachment"))
+        camera_frame = await _auto_attach_frame(camera, arguments.get("attachment"))
+        request = _ambient_llm_request(
+            grounding, arguments.get("attachment"), camera_frame
+        )
         if request is None:
             return _error_response(
                 "the attachment 'dataBase64' value is not valid base64"
@@ -214,43 +283,78 @@ def build_ambient_resolver(llm_service: LLMServicePort) -> ToolHandler:
             "AMBIENT AWARENESS REPORT\n"
             f"- location: {location}\n"
             f"- timestamp: {timestamp}\n"
+            f"- observation: {observation}\n"
             f"- safety gate risk: {verdict.risk_level}\n"
             f"- safety signals: {', '.join(verdict.signals) or 'none detected'}\n"
             f"- safety gate recommendation: {verdict.recommendation}\n"
             f"- model analysis: {response.text}"
         )
+        detections = extract_detections(report)
+        if detections:
+            labels = ", ".join(
+                f"{item['label']} [{item['confidence']:.2f}]" for item in detections
+            )
+            report = f"{report}\n- predicted detections: {labels}"
+        if camera is not None:
+            source = camera_frame.source if camera_frame is not None else "live"
+            camera.record_detections([dict(item) for item in detections], source)
         return MCPResponse(content=(MCPContentItem(kind="text", data=report),))
 
     return resolve
 
 
-def _ambient_llm_request(grounding: str, raw_attachment: object) -> LLMRequest | None:
-    if not isinstance(raw_attachment, dict):
-        return LLMRequest(
-            system_prompt=_AMBIENT_PROMPT,
-            user_prompt=grounding,
-            temperature=0.2,
-            max_tokens=512,
+async def _auto_attach_frame(
+    camera: CameraFrameSource | None, raw_attachment: object
+) -> CameraFrame | None:
+    """Fetch the latest camera frame when no explicit attachment is provided.
+
+    Only live frames are used as multimodal grounding so the model is never
+    fed a synthetic fallback frame.
+    """
+    if camera is None or isinstance(raw_attachment, dict):
+        return None
+    frame = await camera.get_frame()
+    if frame is None or frame.source != "live":
+        return None
+    return frame
+
+
+def _ambient_llm_request(
+    grounding: str,
+    raw_attachment: object,
+    camera_frame: CameraFrame | None = None,
+) -> LLMRequest | None:
+    attachments: list[MultimodalAttachment] = []
+    if isinstance(raw_attachment, dict):
+        try:
+            data = base64.b64decode(str(raw_attachment.get("dataBase64", "")))
+        except Base64Error:
+            return None
+        if not data:
+            return None
+        mime_type = str(raw_attachment.get("mimeType", "application/octet-stream"))
+        attachments.append(
+            MultimodalAttachment(
+                kind=modality_for_mime(mime_type),
+                mime_type=mime_type,
+                data=data,
+            )
         )
-    try:
-        data = base64.b64decode(str(raw_attachment.get("dataBase64", "")))
-    except Base64Error:
-        return None
-    if not data:
-        return None
-    mime_type = str(raw_attachment.get("mimeType", "application/octet-stream"))
+    elif camera_frame is not None:
+        mime_type = camera_frame.content_type or "image/jpeg"
+        attachments.append(
+            MultimodalAttachment(
+                kind=modality_for_mime(mime_type),
+                mime_type=mime_type,
+                data=camera_frame.data,
+            )
+        )
     return LLMRequest(
         system_prompt=_AMBIENT_PROMPT,
         user_prompt=grounding,
         temperature=0.2,
         max_tokens=512,
-        attachments=(
-            MultimodalAttachment(
-                kind=modality_for_mime(mime_type),
-                mime_type=mime_type,
-                data=data,
-            ),
-        ),
+        attachments=tuple(attachments),
     )
 
 
@@ -314,7 +418,9 @@ def build_reminder_resolver(book: ReminderBook) -> ToolHandler:
     return resolve
 
 
-def build_agentic_tool_registry(llm_service: LLMServicePort) -> InMemoryMCPServer:
+def build_agentic_tool_registry(
+    llm_service: LLMServicePort, camera: CameraFrameSource | None = None
+) -> InMemoryMCPServer:
     """Compose the default agentic tool registry for the ecosystem."""
     registry = InMemoryMCPServer()
     reminder_book = ReminderBook()
@@ -330,7 +436,7 @@ def build_agentic_tool_registry(llm_service: LLMServicePort) -> InMemoryMCPServe
             )
         elif agent_tool.name == _AMBIENT_TOOL_NAME:
             registry.register_agent_tool(
-                agent_tool, build_ambient_resolver(llm_service)
+                agent_tool, build_ambient_resolver(llm_service, camera)
             )
         else:
             registry.register_agent_tool(agent_tool, _echo_resolver)

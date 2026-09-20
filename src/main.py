@@ -29,6 +29,15 @@ from src.infrastructure.adapters.mcp.session_manager import SessionManager
 from src.infrastructure.adapters.mcp.tool_resolvers import (
     build_agentic_tool_registry,
 )
+from src.infrastructure.adapters.mcp.web_dashboard import mount_dashboard
+from src.infrastructure.adapters.iot.vivotek_adapter import (
+    DEFAULT_HOST as VIVOTEK_DEFAULT_HOST,
+)
+from src.infrastructure.adapters.iot.vivotek_adapter import (
+    VivotekCameraAdapter,
+    mount_camera_routes,
+)
+from src.infrastructure.config.event_hub import EventHub
 from src.infrastructure.config.telemetry import Telemetry
 
 _ENV_MODEL_ID = "ECHOMIND_BEDROCK_MODEL_ID"
@@ -36,6 +45,7 @@ _ENV_REGION = "ECHOMIND_BEDROCK_REGION"
 _ENV_IDLE_TIMEOUT = "ECHOMIND_SESSION_IDLE_TIMEOUT"
 _ENV_KEEPALIVE = "ECHOMIND_SSE_KEEPALIVE_SECONDS"
 _ENV_FALLBACK_COOLDOWN = "ECHOMIND_FALLBACK_COOLDOWN_SECONDS"
+_ENV_VIVOTEK_IP = "ECHOMIND_VIVOTEK_IP"
 
 HEALTH_ROUTE = "/health"
 METRICS_ROUTE = "/metrics"
@@ -57,6 +67,7 @@ def compose() -> FastAPI:
     server (latency, tool calls) and listens for fallback activations.
     """
     telemetry = Telemetry()
+    event_hub = EventHub()
     llm_service = ResilientLLMAdapter(
         primary=BedrockLLMAdapter(
             model_id=os.environ.get(_ENV_MODEL_ID, "amazon.nova-micro-v1:0"),
@@ -66,7 +77,10 @@ def compose() -> FastAPI:
         cooldown_seconds=_read_env_int(_ENV_FALLBACK_COOLDOWN, 300),
         on_fallback=telemetry.fallback_listener,
     )
-    mcp_service = build_agentic_tool_registry(llm_service)
+    camera = VivotekCameraAdapter(
+        host=os.environ.get(_ENV_VIVOTEK_IP, VIVOTEK_DEFAULT_HOST)
+    )
+    mcp_service = build_agentic_tool_registry(llm_service, camera=camera)
     session_manager = SessionManager(
         idle_timeout_seconds=_read_env_int(_ENV_IDLE_TIMEOUT, 300)
     )
@@ -75,10 +89,13 @@ def compose() -> FastAPI:
         session_manager=session_manager,
         keepalive_seconds=_read_env_int(_ENV_KEEPALIVE, 15),
         telemetry=telemetry,
+        event_hub=event_hub,
     )
     app = server.app
     app.add_api_route(HEALTH_ROUTE, _health, methods=["GET"])
-    app.add_api_route(METRICS_ROUTE, _metrics(telemetry), methods=["GET"])
+    app.add_api_route(METRICS_ROUTE, _metrics(telemetry, llm_service), methods=["GET"])
+    mount_dashboard(app, event_hub)
+    mount_camera_routes(app, camera)
     return app
 
 
@@ -86,11 +103,18 @@ async def _health() -> dict[str, str]:
     return {"status": "ok", "transport": "mcp/streamable-http"}
 
 
-def _metrics(telemetry: Telemetry):
+def _metrics(telemetry: Telemetry, llm_service: object | None = None):
     """Return a route handler exposing the telemetry snapshot as JSON."""
 
     async def handler() -> dict:
-        return telemetry.snapshot()
+        snapshot = telemetry.snapshot()
+        if llm_service is not None:
+            snapshot["provider"] = {
+                "active_provider": getattr(llm_service, "active_provider", "primary"),
+                "is_degraded": bool(getattr(llm_service, "is_degraded", False)),
+                "stats": getattr(llm_service, "stats", {}),
+            }
+        return snapshot
 
     return handler
 

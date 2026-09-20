@@ -42,6 +42,7 @@ from src.infrastructure.adapters.mcp.session_manager import (
     SessionManager,
     SessionStatus,
 )
+from src.infrastructure.config.event_hub import EventHub
 from src.infrastructure.config.telemetry import Telemetry
 
 JSON_RPC_VERSION = "2.0"
@@ -145,12 +146,14 @@ class FastAPIMCPServer:
         endpoint: str = DEFAULT_ENDPOINT,
         keepalive_seconds: int = 15,
         telemetry: Telemetry | None = None,
+        event_hub: EventHub | None = None,
     ) -> None:
         self._mcp_service = mcp_service
         self._session_manager = session_manager or SessionManager()
         self._endpoint = endpoint
         self._keepalive_seconds = keepalive_seconds
         self._telemetry = telemetry or Telemetry()
+        self._event_hub = event_hub
         self.app = FastAPI(
             title=f"{SERVER_NAME} MCP Streamable HTTP", version=SERVER_VERSION
         )
@@ -342,8 +345,21 @@ class FastAPIMCPServer:
             return _json_rpc_error(
                 request_id, -32602, "tool arguments must be an object"
             )
-        response = await self._mcp_service.call_tool(name, arguments)
+        self._publish_tool_event(name, "IN_PROGRESS")
+        try:
+            response = await self._mcp_service.call_tool(name, arguments)
+        except Exception:
+            self._publish_tool_event(name, "ERROR")
+            raise
         self._telemetry.record_tool_call(name)
+        status = "OK"
+        if response.is_error:
+            status = "ERROR"
+        else:
+            report = "".join(item.data for item in response.content)
+            if "risk: CRITICAL" in report:
+                status = "CRITICAL"
+        self._publish_tool_event(name, status)
         result = {
             "content": [
                 {"type": item.kind, "text": item.data} for item in response.content
@@ -351,3 +367,15 @@ class FastAPIMCPServer:
             "isError": response.is_error,
         }
         return _json_rpc_response(request_id, result)
+
+    def _publish_tool_event(self, tool_name: str, status: str) -> None:
+        if self._event_hub is None:
+            return
+        self._event_hub.publish(
+            {
+                "kind": "tool_call",
+                "tool": tool_name,
+                "status": status,
+                "ts": time.time(),
+            }
+        )
