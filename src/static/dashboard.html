@@ -175,10 +175,23 @@
         <div class="panel rounded-xl p-4">
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-[11px] uppercase tracking-widest text-slate-500">Active Multimodal Analytics</h3>
-            <div id="cam-title" class="text-[10px] font-mono text-cyan-300">CAM-01 &middot; LIVING ROOM</div>
+            <div id="cam-title" class="text-[10px] font-mono text-cyan-300">CAM-01 &middot; VIVOTEK FD8367</div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+          <div class="mb-2">
+            <label for="cam-select" class="block text-[10px] uppercase tracking-widest text-slate-500 mb-1.5">Camera Selector</label>
+            <select id="cam-select" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-[11px] font-mono text-cyan-300 focus:outline-none focus:border-cyan-400">
+              <option value="real">CAM-01: Vivotek FD8367 (Hardware Real - 192.168.40.10)</option>
+              <option value="living">CAM-02: Living Room (Simulación Agéntica)</option>
+              <option value="kitchen">CAM-03: Kitchen (Simulación Agéntica)</option>
+              <option value="patio">CAM-04: Patio / Outdoor (Simulación Agéntica)</option>
+            </select>
+            <div class="flex items-center justify-between mt-1.5">
+              <span id="cam-source" class="text-[9px] font-mono font-bold text-cyan-300 tracking-widest">LIVE HARDWARE</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2" style="display:none">
             <button id="tab-living" class="tab-btn tab-active px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 text-[10px] font-bold text-cyan-300">LIVING ROOM</button>
             <button id="tab-kitchen" class="tab-btn px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 text-[10px] text-slate-400">KITCHEN</button>
             <button id="tab-patio" class="tab-btn px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 text-[10px] text-slate-400">PATIO</button>
@@ -193,17 +206,18 @@
 
             <img id="cam-live" class="absolute inset-0 w-full h-full object-cover" style="display:none; z-index:1" src="" alt="Vivotek live">
             <div id="ai-overlay" class="absolute inset-0 overflow-hidden" style="display:none; z-index:20"></div>
+            <span id="ai-alert" class="hidden absolute top-2 right-2 text-orange-400 font-bold text-[10px] pulse-alert z-30 border border-orange-500/60 bg-orange-500/10 rounded-md px-2 py-1">ALERT</span>
 
-            <div id="obj-living" class="cam-scene" style="display:block">
-              <div class="absolute bottom-1 left-1 text-[8px] text-cyan-400 font-mono z-10">CAM-01 &middot; 1080p &middot; <span id="cam-time">--:--:--</span></div>
+            <div id="obj-living" class="cam-scene" style="display:none">
+              <div class="absolute bottom-1 left-1 text-[8px] text-cyan-400 font-mono z-10">CAM-02 &middot; 1080p &middot; <span id="cam-time">--:--:--</span></div>
               <span id="alert-living" class="absolute top-2 right-2 hidden text-orange-400 font-bold text-[9px] pulse-alert z-10">ALERT &middot; FALL DETECTED</span>
             </div>
             <div id="obj-kitchen" class="cam-scene" style="display:none">
-              <div class="absolute bottom-1 left-1 text-[8px] text-cyan-400 font-mono z-10">CAM-02 &middot; 1080p &middot; <span id="cam-time-2">--:--:--</span></div>
+              <div class="absolute bottom-1 left-1 text-[8px] text-cyan-400 font-mono z-10">CAM-03 &middot; 1080p &middot; <span id="cam-time-2">--:--:--</span></div>
               <span id="alert-kitchen" class="absolute top-2 right-2 hidden text-orange-400 font-bold text-[9px] pulse-alert z-10">ALERT &middot; SMOKE DETECTED</span>
             </div>
             <div id="obj-patio" class="cam-scene" style="display:none">
-              <div class="absolute bottom-1 left-1 text-[8px] text-cyan-400 font-mono z-10">CAM-03 &middot; 1080p &middot; <span id="cam-time-3">--:--:--</span></div>
+              <div class="absolute bottom-1 left-1 text-[8px] text-cyan-400 font-mono z-10">CAM-04 &middot; 1080p &middot; <span id="cam-time-3">--:--:--</span></div>
               <span id="alert-patio" class="absolute top-2 right-2 hidden text-orange-400 font-bold text-[9px] pulse-alert z-10">ALERT</span>
             </div>
           </div>
@@ -303,9 +317,55 @@
             </div>
           </div>
         </div>
+
+        <div class="panel rounded-xl p-4">
+          <div class="flex justify-between items-center mb-3">
+            <h3 class="text-[11px] uppercase tracking-widest text-slate-500">Alexa Ecosystem Devices</h3>
+            <span class="text-[9px] font-mono text-slate-600">MCP &middot; Discovery</span>
+          </div>
+          <div class="space-y-2 mb-3">
+            <a href="https://www.amazon.com/dp/B08MQLD231" target="_blank" rel="noopener" class="flex items-center justify-between px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 hover:border-cyan-500/60 transition text-xs group">
+              <span class="font-bold text-cyan-300">Echo Show 10 / Echo Hub</span>
+              <span class="text-[9px] text-slate-500 group-hover:text-cyan-400">B08MQLD231 &rarr;</span>
+            </a>
+            <a href="https://www.amazon.com/dp/B0B6GH3M3B" target="_blank" rel="noopener" class="flex items-center justify-between px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 hover:border-cyan-500/60 transition text-xs group">
+              <span class="font-bold text-cyan-300">Ring Indoor Cam / Outdoor</span>
+              <span class="text-[9px] text-slate-500 group-hover:text-cyan-400">B0B6GH3M3B &rarr;</span>
+            </a>
+            <a href="https://www.amazon.com/dp/B0BGH83N2B" target="_blank" rel="noopener" class="flex items-center justify-between px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 hover:border-cyan-500/60 transition text-xs group">
+              <span class="font-bold text-cyan-300">Blink Mini 2</span>
+              <span class="text-[9px] text-slate-500 group-hover:text-cyan-400">B0BGH83N2B &rarr;</span>
+            </a>
+            <a href="https://www.amazon.com/dp/B0786LH3A7" target="_blank" rel="noopener" class="flex items-center justify-between px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 hover:border-cyan-500/60 transition text-xs group">
+              <span class="font-bold text-cyan-300">Sonoff WiFi Smart Switch</span>
+              <span class="text-[9px] text-slate-500 group-hover:text-cyan-400">B0786LH3A7 &rarr;</span>
+            </a>
+          </div>
+          <button id="device-add-btn" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-[11px] font-bold text-cyan-400 hover:border-cyan-500/60 transition">+ Añadir Nuevo Dispositivo MCP</button>
+        </div>
       </section>
 
     </main>
+  </div>
+</div>
+
+<div id="device-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+  <div class="panel rounded-2xl p-6 max-w-md w-full">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-sm font-bold text-cyan-300">Añadir Nuevo Dispositivo MCP</h3>
+      <button id="device-modal-close" class="text-slate-500 hover:text-slate-300" title="Cerrar">&#10005;</button>
+    </div>
+    <p class="text-xs text-slate-400 leading-relaxed mb-3">
+      El ecosistema EchoMind descubre dispositivos automáticamente mediante <span class="text-cyan-300 font-mono">JSON-RPC</span>
+      sobre el protocolo <span class="text-cyan-300 font-mono">MCP Streamable HTTP</span>. Coloca el dispositivo en la misma red,
+      habilita su endpoint MCP y el bus agéntico lo registra en el <span class="text-cyan-300">tool registry</span> sin configuración manual.
+    </p>
+    <ul class="text-xs text-slate-400 space-y-1 mb-4 list-disc list-inside">
+      <li><span class="text-slate-300 font-mono">initialize</span> &rarr; handshake y capacidades</li>
+      <li><span class="text-slate-300 font-mono">tools/list</span> &rarr; expone los skills del dispositivo</li>
+      <li><span class="text-slate-300 font-mono">tools/call</span> &rarr; invocación agéntica en vivo</li>
+    </ul>
+    <button id="device-modal-gotit" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-[11px] font-bold text-cyan-400 hover:border-cyan-500/60 transition">Entendido</button>
   </div>
 </div>
 
@@ -534,13 +594,14 @@
       el.textContent = d.label + " [" + Math.round((d.confidence || 0.8) * 100) + "%]";
       ov.appendChild(el);
     });
-    var alert = document.getElementById("alert-living");
+    var alert = document.getElementById("ai-alert");
     var bad = dets.some(function (d) { return /FALL|SMOKE|FIRE|INTRUDER/.test(d.label); });
+    var cls = "absolute top-2 right-2 text-orange-400 font-bold text-[10px] pulse-alert z-30 border border-orange-500/60 bg-orange-500/10 rounded-md px-2 py-1";
     if (bad) {
-      alert.className = "absolute top-2 right-2 text-orange-400 font-bold text-[9px] pulse-alert z-10";
-      alert.innerHTML = "ALERT &middot; " + (dets[0] ? dets[0].label : "CRITICAL");
+      alert.className = cls;
+      alert.textContent = "ALERT &middot; " + (dets[0] ? dets[0].label : "CRITICAL");
     } else {
-      alert.className = "hidden absolute top-2 right-2 text-orange-400 font-bold text-[9px] pulse-alert z-10";
+      alert.className = "hidden " + cls;
     }
   }
 
@@ -558,21 +619,28 @@
     }
     camLive = live;
     applyCameraMode();
-    if (camLive) {
+    if (camLive && currentCam === "real") {
       document.getElementById("cam-live").src = "/api/cam/vivotek/snapshot?t=" + Date.now();
     }
   }
 
   function applyCameraMode() {
-    var showCam = camLive && currentCam === "living";
     var img = document.getElementById("cam-live");
     var ov = document.getElementById("ai-overlay");
-    var living = document.getElementById("obj-living");
-    if (showCam) {
-      img.style.display = "block"; ov.style.display = "block"; living.style.display = "none";
+    var active = currentCam === "real" && camLive ? "real" : currentCam;
+    var showLive = active === "real";
+    img.style.display = showLive ? "block" : "none";
+    ov.style.display = showLive ? "block" : "none";
+    ["living", "kitchen", "patio"].forEach(function (t) {
+      document.getElementById("obj-" + t).style.display = active === t ? "block" : "none";
+    });
+    var src = document.getElementById("cam-source");
+    if (currentCam === "real") {
+      src.textContent = camLive ? "LIVE HARDWARE" : "SIM FALLBACK";
+      src.className = camLive ? "text-[9px] font-mono font-bold text-cyan-300 tracking-widest" : "text-[9px] font-mono font-bold text-orange-400 tracking-widest";
     } else {
-      img.style.display = "none"; ov.style.display = "none";
-      living.style.display = currentCam === "living" ? "block" : "none";
+      src.textContent = "AGENTIC SIMULATION";
+      src.className = "text-[9px] font-mono font-bold text-slate-400 tracking-widest";
     }
   }
 
@@ -603,24 +671,28 @@
     });
   }
 
-  function switchCam(tile) {
-    currentCam = tile;
-    ["living", "kitchen", "patio"].forEach(function (t) {
-      document.getElementById("obj-" + t).style.display = t === tile ? "block" : "none";
-      var tab = document.getElementById("tab-" + t);
-      tab.className = t === tile
-        ? "tab-btn tab-active px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 text-[10px] font-bold text-cyan-300"
-        : "tab-btn px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 text-[10px] text-slate-400";
+  function switchCam(cam) {
+    currentCam = cam;
+    var titles = {
+      real: "CAM-01 &middot; VIVOTEK FD8367",
+      living: "CAM-02 &middot; LIVING ROOM",
+      kitchen: "CAM-03 &middot; KITCHEN",
+      patio: "CAM-04 &middot; PATIO"
+    };
+    document.getElementById("cam-title").textContent = titles[cam] || titles.real;
+    document.getElementById("cam-select").value = cam;
+    ["obj-living", "obj-kitchen", "obj-patio"].forEach(function (id) {
+      document.getElementById(id).style.display = "none";
     });
-    var titles = { living: "CAM-01 &middot; LIVING ROOM", kitchen: "CAM-02 &middot; KITCHEN", patio: "CAM-03 &middot; PATIO" };
-    document.getElementById("cam-title").textContent = titles[tile];
     cycleDetections();
     applyCameraMode();
   }
 
   ["living", "kitchen", "patio"].forEach(function (t) {
-    document.getElementById("tab-" + t).addEventListener("click", function () { switchCam(t); });
+    var tab = document.getElementById("tab-" + t);
+    if (tab) tab.addEventListener("click", function () { switchCam(t); });
   });
+  document.getElementById("cam-select").addEventListener("change", function () { switchCam(this.value); });
 
   var PIPELINE = ["Audio Ingest", "STT", "Context Enrichment (MCP)", "Model Inference", "TTS Out"];
   var pipelineIdx = 0;
@@ -665,9 +737,14 @@
   seedLog();
   pollMetrics();
   clock();
-  switchCam("living");
+  switchCam("real");
   pollCamera();
   updateBars();
+  var modal = document.getElementById("device-modal");
+  document.getElementById("device-add-btn").addEventListener("click", function () { modal.classList.remove("hidden"); });
+  modal.addEventListener("click", function (e) { if (e.target === modal) modal.classList.add("hidden"); });
+  document.getElementById("device-modal-close").addEventListener("click", function () { modal.classList.add("hidden"); });
+  document.getElementById("device-modal-gotit").addEventListener("click", function () { modal.classList.add("hidden"); });
 })();
 </script>
 </body>
