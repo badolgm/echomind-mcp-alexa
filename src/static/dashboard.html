@@ -189,6 +189,28 @@
             <div class="flex items-center justify-between mt-1.5">
               <span id="cam-source" class="text-[9px] font-mono font-bold text-cyan-300 tracking-widest">LIVE HARDWARE</span>
             </div>
+            <div class="mt-2 grid grid-cols-5 gap-1 text-center">
+              <div class="rounded bg-slate-950 border border-slate-800 px-1 py-1">
+                <div class="text-[8px] text-slate-500 uppercase">AI Risk</div>
+                <div id="cam-risk" class="text-[10px] font-bold text-emerald-400">LOW</div>
+              </div>
+              <div class="rounded bg-slate-950 border border-slate-800 px-1 py-1">
+                <div class="text-[8px] text-slate-500 uppercase">Temp</div>
+                <div id="cam-temp" class="text-[10px] font-bold text-cyan-300">--</div>
+              </div>
+              <div class="rounded bg-slate-950 border border-slate-800 px-1 py-1">
+                <div class="text-[8px] text-slate-500 uppercase">Smoke</div>
+                <div id="cam-smoke" class="text-[10px] font-bold text-cyan-300">--</div>
+              </div>
+              <div class="rounded bg-slate-950 border border-slate-800 px-1 py-1">
+                <div class="text-[8px] text-slate-500 uppercase">Gate</div>
+                <div id="cam-gate" class="text-[10px] font-bold text-slate-400">closed</div>
+              </div>
+              <div class="rounded bg-slate-950 border border-slate-800 px-1 py-1">
+                <div class="text-[8px] text-slate-500 uppercase">Motion</div>
+                <div id="cam-motion" class="text-[10px] font-bold text-cyan-300">--</div>
+              </div>
+            </div>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2" style="display:none">
@@ -526,7 +548,12 @@
         document.getElementById("conn-dot").className = "w-2 h-2 inline-block rounded-full bg-emerald-400";
         document.getElementById("conn-label").textContent = "live";
       };
-      es.onmessage = function (ev) { try { logRow(JSON.parse(ev.data)); } catch (e) {} };
+      es.onmessage = function (ev) {
+        var msg;
+        try { msg = JSON.parse(ev.data); } catch (e) { return; }
+        logRow(msg);
+        if (msg.kind === "camera_alert") handleCameraAlert(msg);
+      };
       es.onerror = function () {
         document.getElementById("conn-dot").className = "w-2 h-2 inline-block rounded-full bg-rose-500";
         document.getElementById("conn-label").textContent = "reconnecting";
@@ -534,6 +561,75 @@
     } else {
       document.getElementById("conn-label").textContent = "EventSource unsupported";
     }
+  }
+
+  var ALERT_SPANISH = {
+    "FALL DETECTED": "posible caída",
+    "SMOKE": "humo",
+    "FIRE": "fuego",
+    "PERSON": "persona",
+    "PET": "mascota",
+    "PACKAGE": "paquete",
+    "LAPTOP": "portátil",
+    "INTRUDER": "intruso",
+    "GATE_OPEN": "la reja está abierta",
+    "DOOR_OPEN": "la puerta está abierta",
+    "PET_ESCAPING": "la mascota intenta escapar",
+    "TEMP_RISING": "la temperatura sube",
+    "MOTION": "movimiento"
+  };
+
+  function renderWatchState(st) {
+    var riskColors = { "LOW": "", "MEDIUM": "text-amber-400", "HIGH": "text-orange-400", "CRITICAL": "text-rose-500" };
+    var risk = document.getElementById("cam-risk");
+    risk.textContent = st.risk || "LOW";
+    risk.className = "text-[10px] font-bold " + (riskColors[risk.textContent] || "text-emerald-400");
+    document.getElementById("cam-temp").textContent =
+      (st.temperature_c != null ? st.temperature_c.toFixed(1) + "°C" : "--");
+    document.getElementById("cam-smoke").textContent =
+      (st.smoke_density != null ? Math.round(st.smoke_density * 100) + "%" : "--");
+    var gate = document.getElementById("cam-gate");
+    gate.textContent = st.gate_open ? "OPEN" : "closed";
+    gate.className = st.gate_open
+      ? "text-[10px] font-bold text-orange-400 pulse-alert"
+      : "text-[10px] font-bold text-slate-400";
+    document.getElementById("cam-motion").textContent =
+      (st.motion_score != null ? Math.round(st.motion_score * 100) + "%" : "--");
+  }
+
+  var voiceLastText = "";
+  var voiceLastAt = 0;
+  function speakAlexa(text) {
+    try {
+      if (!window.speechSynthesis) return;
+      var now = Date.now();
+      if (text === voiceLastText && now - voiceLastAt < 10000) return;
+      voiceLastText = text;
+      voiceLastAt = now;
+      window.speechSynthesis.cancel();
+      var utter = new SpeechSynthesisUtterance(text);
+      utter.lang = "es-ES";
+      utter.rate = 1.0;
+      utter.pitch = 1.0;
+      var voices = window.speechSynthesis.getVoices();
+      var esVoice = voices.find(function (v) { return /^(es-ES|es-MX|es_)/i.test(v.lang || ""); });
+      if (esVoice) utter.voice = esVoice;
+      window.speechSynthesis.speak(utter);
+    } catch (e) {}
+  }
+
+  function handleCameraAlert(msg) {
+    if (msg.detections && msg.detections.length && currentCam === "real") {
+      renderAiDetections(msg.detections);
+    }
+    if (msg.risk !== "HIGH" && msg.risk !== "CRITICAL") return;
+    if (msg.announcement) { speakAlexa(msg.announcement); return; }
+    var parts = [msg.risk === "CRITICAL" ? "Alerta crítica" : "Atención"];
+    if (msg.location) parts.push("en " + msg.location + ".");
+    var labels = (msg.detections || [])
+      .map(function (d) { return ALERT_SPANISH[d.label] || d.label; });
+    parts.push(labels.length ? "Detecciones: " + labels.join(", ") + "." : "Movimiento detectado.");
+    speakAlexa(parts.join(" "));
   }
 
   function clock() {
@@ -575,7 +671,12 @@
     "PET": { x: 34, y: 56, w: 22, h: 16 },
     "PACKAGE": { x: 60, y: 62, w: 18, h: 16 },
     "LAPTOP": { x: 40, y: 42, w: 22, h: 14 },
-    "INTRUDER": { x: 26, y: 34, w: 18, h: 38 }
+    "INTRUDER": { x: 26, y: 34, w: 18, h: 38 },
+    "GATE_OPEN": { x: 28, y: 66, w: 30, h: 12 },
+    "DOOR_OPEN": { x: 28, y: 66, w: 30, h: 12 },
+    "PET_ESCAPING": { x: 42, y: 62, w: 26, h: 18 },
+    "TEMP_RISING": { x: 60, y: 8, w: 28, h: 16 },
+    "MOTION": { x: 18, y: 20, w: 34, h: 24 }
   };
 
   function renderAiDetections(dets) {
@@ -595,7 +696,7 @@
       ov.appendChild(el);
     });
     var alert = document.getElementById("ai-alert");
-    var bad = dets.some(function (d) { return /FALL|SMOKE|FIRE|INTRUDER/.test(d.label); });
+    var bad = dets.some(function (d) { return /FALL|SMOKE|FIRE|INTRUDER|GATE_OPEN|DOOR_OPEN|PET_ESCAPING|TEMP_RISING/.test(d.label); });
     var cls = "absolute top-2 right-2 text-orange-400 font-bold text-[10px] pulse-alert z-30 border border-orange-500/60 bg-orange-500/10 rounded-md px-2 py-1";
     if (bad) {
       alert.className = cls;
@@ -619,9 +720,15 @@
     }
     camLive = live;
     applyCameraMode();
-    if (camLive && currentCam === "real") {
-      document.getElementById("cam-live").src = "/api/cam/vivotek/snapshot?t=" + Date.now();
-    }
+    try {
+      var stateResp = await fetch("/api/cam/vivotek/state");
+      if (stateResp.status === 200) renderWatchState(await stateResp.json());
+    } catch (e) {}
+  }
+
+  function refreshLiveSnapshot() {
+    if (currentCam !== "real" || !camLive) return;
+    document.getElementById("cam-live").src = "/api/cam/vivotek/snapshot?t=" + Date.now();
   }
 
   function applyCameraMode() {
@@ -733,12 +840,14 @@
   setInterval(pulsePipeline, 1400);
   setInterval(swayRadar, 3000);
   setInterval(pollCamera, 2000);
+  setInterval(refreshLiveSnapshot, 1500);
   feed();
   seedLog();
   pollMetrics();
   clock();
   switchCam("real");
   pollCamera();
+  refreshLiveSnapshot();
   updateBars();
   var modal = document.getElementById("device-modal");
   document.getElementById("device-add-btn").addEventListener("click", function () { modal.classList.remove("hidden"); });

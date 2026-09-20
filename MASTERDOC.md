@@ -194,8 +194,9 @@ In-process round trips, Streamable HTTP over ASGI (development laptop):
 
 ## 10. Testing & quality gates
 
-- 79 tests across `tests/unit` (domain, use cases, adapters, fallback, ambient, dashboard) and
-  `tests/integration` (SSE session lifecycle, composition smoke, telemetry, skill manifest).
+- 102 tests across `tests/unit` (domain, use cases, adapters, fallback, ambient, vivotek,
+  dashboard, ambient watchdog/sensor bus) and `tests/integration` (SSE session lifecycle,
+  composition smoke, telemetry, skill manifest).
 - All ports are mocked: suite runs offline.
 - Mandatory before completing any phase:
   ```powershell
@@ -237,19 +238,41 @@ code changes.
 - [x] Phase 5 — Alexa+ skill manifest, observability, Docker packaging, demo runner.
 - [x] Phase 6 — EchoMind MCP Control Center: interactive web dashboard (SSE tools log, live metrics, QFP badge).
 - [x] Phase 7 — Live Vivotek IP camera: real-time snapshot feed, graceful fallback frame, AI detection overlay.
+- [x] Phase 8 — Autonomous ambient watchdog: background prediction engine (sensors + frame motion), proactive hot-word alerts and Spanish text-to-speech on the dashboard.
 
-## 13. Web Control Center
+## 14. Web Control Center
 
 `/dashboard` (or `/`) serves the EchoMind MCP Control Center: a dark slate UI with neon cyan and
 Amazon orange accents, pure HTML + Tailwind (CDN) + vanilla JS. It polls `/metrics` every 2 s and
 consumes the `/dashboard/events` SSE stream (fed by the `EventHub` broadcast from
 `FastAPIMCPServer._call_tool`) for the live tools log. The **QUOTA FALLBACK MODE ACTIVE (QFP)**
 badge switches to orange warning state when `/metrics.provider.is_degraded` becomes true, which the
-resilience layer sets on the first Bedrock quota/credential failure. Camera feeds, detection
-bounding boxes (PERSON / DOG / PACKAGE / FALL DETECTED / SMOKE DETECTED), the MCP pipeline stepper
-and CPU/MEM/NET gauges are simulated client-side to showcase the multimodal analytics concept.
+resilience layer sets on the first Bedrock quota/credential failure.
 
-## 14. Live Vivotek camera integration (Phase 7)
+The **Dynamic Camera Viewer** (`cam-select`) offers four sources: CAM-01 (physical Vivotek FD8367
+live feed), CAM-02 Living Room, CAM-03 Kitchen and CAM-04 Patio — the last three being agentic
+simulations that cycle scenes and draw AI-predicted bounding boxes (PERSON / DOG / PACKAGE / FALL
+DETECTED / SMOKE DETECTED). Selecting CAM-01 refreshes the live JPEG every **1.5 s** via
+`refreshLiveSnapshot()` against `GET /api/cam/vivotek/snapshot?t=<timestamp>` (cache-busting); the
+backend `httpx` client acts as an **asynchronous reverse proxy** so the browser never talks to the
+camera directly (FD8367 MJPEG needs an ActiveX plugin and violates CORS). Critical labels raise an
+orange **ALERT** (`ai-alert`); unreachable camera → clean synthetic test frame with `SIM FALLBACK`
+badge.
+
+The camera panel also renders the **AI Watchdog** readout — `AI Risk · Temp · Smoke · Gate · Motion`
+— polling `GET /api/cam/vivotek/state` every 2 s. It consumes `/dashboard/events` not only for the
+tools log but for `camera_alert` events broadcast by the watchdog over the **EventHub**: detection
+boxes are drawn over the viewer and, for HIGH/CRITICAL risk, `speakAlexa()` announces the verdict
+in **Spanish** (`window.speechSynthesis`, es-ES/es-MX voice, `cancel()` to avoid queue overlap),
+using the server-generated `announcement` text ("¡Alerta crítica! Humo detectado…").
+
+The right column includes the **Alexa Ecosystem Devices** catalogue with direct manufacturer links
+(Echo Show 10 / Echo Hub `B08MQLD231`, Ring Indoor Cam / Outdoor `B0B6GH3M3B`, Blink Mini 2
+`B0BGH83N2B`, Sonoff WiFi Smart Switch `B0786LH3A7`) and an "Añadir Nuevo Dispositivo MCP" button
+that opens a modal explaining automatic device discovery over **JSON-RPC / MCP Streamable HTTP**
+(`initialize` → handshake, `tools/list` → skills, `tools/call` → live invocation).
+
+## 15. Live Vivotek camera integration (Phase 7)
 
 `VivotekCameraAdapter` (`src/infrastructure/adapters/iot/vivotek_adapter.py`) is an async `httpx`
 client for the FD8367 snapshot endpoint (`http://192.168.40.10/cgi-bin/viewer/video.jpg`, override
@@ -260,12 +283,82 @@ operational 24/7. Routes (mounted in `main.compose`):
 - `GET /api/cam/vivotek/snapshot` — raw JPEG/PNG with `X-Source`, `X-Captured-At` and `no-store`;
   `?format=base64` returns JSON.
 - `GET /api/cam/vivotek/detections` — JSON `{source, live, detections}` fed by the ambient resolver.
+- `GET /api/cam/vivotek/state` — latest watchdog vision snapshot `{risk, temperature_c,
+  smoke_density, gate_open, door_open, pet_proximity, motion_score, detections, announcement}`.
 
 `build_ambient_resolver(llm_service, camera=None)` auto-attaches the latest **live** frame to the
 Bedrock Converse request when no explicit media attachment is given, then `extract_detections`
 derives AI-predicted labels (FALL DETECTED / SMOKE / FIRE / PERSON / PET / PACKAGE / LAPTOP /
 INTRUDER) from the report text and records them on the camera adapter. The dashboard's CAM-01
-(LIVING ROOM) tab refreshes the live image every ~2 s, overlays the predicted bounding boxes and
-raises an orange ALERT for critical labels; when the camera fails it keeps rendering the simulated
-scenes. The local rule engine (QFP) and `extract_detections` match safety keywords as whole words,
-so tokens embedded in labels (e.g. `cat` inside `location`) never trigger false detections.
+selector refreshes the live image every **1.5 s**, overlays the predicted bounding boxes and
+raises an orange ALERT for critical labels; when the camera fails it displays the simulated scenes
+via `SIM FALLBACK`. The local rule engine (QFP) and `extract_detections` match safety keywords as
+whole words, so tokens embedded in labels (e.g. `cat` inside `location`) never trigger false
+detections.
+
+## 16. Autonomous Ambient Watchdog (Phase 8)
+
+**Problem solved.** Before Phase 8 the dashboard only reacted: snapshots refreshed but nothing
+predicted unless a tool was explicitly invoked with text. There was no continuous cognition.
+
+**Solution.** `AmbientWatchService` (`src/infrastructure/services/ambient_watch_service.py`) is an
+autonomous background loop started/stopped with the ASGI application lifecycle
+(`_attach_watchdog_lifespan` in `src/main.py`). Every 3 s it:
+
+1. fetches the latest camera frame through `VivotekCameraAdapter.get_frame()`;
+2. measures **real motion** between consecutive live frames with `frame_delta_ratio()` — the
+   fraction of sampled bytes that differ between two JPEG payloads (static scenes are
+   near-identical; changing scenes produce a high ratio; a deterministic fallback PNG yields 0);
+3. reads home telemetry from `SensorBus` (`src/infrastructure/services/sensor_bus.py`), a
+   deterministic, self-driven sensor network evolving over a repeating **120-second scenario
+   cycle**: gate/door reed switches, smoke density, temperature and pet-collar proximity/movement;
+4. runs `predict_ambient_state()` — an explainable, deterministic prediction engine combining
+   thresholds and trends: smoke `≥0.20/0.45/0.75` → MEDIUM/HIGH/**CRITICAL** (FIRE at the top),
+   temperature `≥26 °C` with a rising slope → MEDIUM/HIGH **TEMP_RISING**, gate open + pet at the
+   exit → HIGH **PET_ESCAPING**, open gate/door → **GATE_OPEN**/**DOOR_OPEN**, and CV motion →
+   **MOTION**;
+5. records the predictions on the camera adapter (fresh `/detections`), caches them in
+   `last_state` (served by `/api/cam/vivotek/state`) and publishes a **`camera_alert`** event to
+   the `EventHub` (→ `/dashboard/events`) only when the risk is HIGH/CRITICAL, the fingerprint
+   changes **and** the verdict is driven by a visual access trigger (`MOTION`, `GATE_OPEN`,
+   `PET_ESCAPING`) — smoke/temperature readings never fire alerts on their own, keeping the
+   transmission clean for demos — with a Spanish `announcement` such as *"¡Alerta crítica!
+   Detecciones: humo, fuego. Llama a emergencias…"*.
+
+The `analyze_ambient_stream` resolver (`tool_resolvers.py`) also broadcasts `camera_alert` events
+(risk, location, detections) when it runs, so manual/agentic analysis and the autonomous watchdog
+share the same alerting channel.
+
+## 17. Alineación con el Hackathon Amazon 2026
+
+- **Pista principal — Alexa+**: servidor **MCP Streamable HTTP** (spec `2025-11-25`,
+  `Mcp-Session-Id`, SSE remoto), `alexa_skill/skill.json` (**Agent Skills**) y el **EchoMind MCP
+  Control Center** como superficie operativa.
+- **Minidesafío AWS Builder**: visión multimodal con la **Amazon Bedrock Converse API**
+  (adjuntos image/video/audio/document en `BedrockLLMAdapter`) + **Resiliencia Graceful
+  Fallback**, el **Quota Fallback Protocol (QFP)**: `ResilientLLMAdapter` failover determinista a
+  `RuleBasedLLMAdapter` sin romper la sesión MCP (verificado en vivo sin credenciales AWS).
+- **Minidesafío Código Abierto**: repositorio público, arquitectura hexagonal/DDD con capas
+  puras, 100% tipado, suite **102/102 en verde** ejecutable offline (`pytest -q`), `flake8` en 0,
+  `black` limpio y documentación completa (`README.md` + `MASTERDOC.md`).
+
+## 18. Estado actual — Fases 7-8 completadas
+
+**Camera.** Real integration of a **Vivotek FD8367**: `http.cgi-bin/viewer/video.jpg` snapshots
+verified live (~**62 KB / JPEG frame** at `192.168.40.10`), night vision via built-in **IR LEDs**
+(0.01 lx) without extra illumination, endpoint answered `200` even without credentials. The
+`httpx` backend proxies each frame to the dashboard every 1.5 s; failures degrade to a
+deterministic clean PNG test frame (24/7 availability).
+
+**Resilience.** The **Quota Fallback Protocol (QFP)** keeps the MCP server fully operational when
+AWS Bedrock is throttled/credential-less/unreachable: `ResilientLLMAdapter` fails over
+deterministically to `RuleBasedLLMAdapter` (same `LLMServicePort` contract), verified end-to-end
+with zero AWS credentials (CRITICAL ambient alert answered locally).
+
+**Alexa device catalogue.** Dashboard panel with direct manufacturer links — Echo Show 10 / Echo
+Hub (`B08MQLD231`), Ring Indoor Cam / Outdoor (`B0B6GH3M3B`), Blink Mini 2 (`B0BGH83N2B`), Sonoff
+WiFi Smart Switch (`B0786LH3A7`) — and a JSON-RPC MCP discovery modal showing how each device
+registers `initialize` / `tools/list` / `tools/call` over Streamable HTTP.
+
+**Quality gates.** **102/102 tests green** (including the watchdog/sensor-bus suite), `flake8
+src tests` → 0 violations, `black --check src tests --line-length 88` → clean.

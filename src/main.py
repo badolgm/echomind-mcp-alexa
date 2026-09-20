@@ -14,7 +14,9 @@ in AWS Lambda (via ASGI wrapper), ECS/Fargate or a Docker container.
 
 from __future__ import annotations
 
+import asyncio
 import os
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
@@ -39,6 +41,8 @@ from src.infrastructure.adapters.iot.vivotek_adapter import (
 )
 from src.infrastructure.config.event_hub import EventHub
 from src.infrastructure.config.telemetry import Telemetry
+from src.infrastructure.services.ambient_watch_service import AmbientWatchService
+from src.infrastructure.services.sensor_bus import SimulatedSensorBus
 
 _ENV_MODEL_ID = "ECHOMIND_BEDROCK_MODEL_ID"
 _ENV_REGION = "ECHOMIND_BEDROCK_REGION"
@@ -80,7 +84,14 @@ def compose() -> FastAPI:
     camera = VivotekCameraAdapter(
         host=os.environ.get(_ENV_VIVOTEK_IP, VIVOTEK_DEFAULT_HOST)
     )
-    mcp_service = build_agentic_tool_registry(llm_service, camera=camera)
+    watch = AmbientWatchService(
+        camera=camera,
+        sensor_bus=SimulatedSensorBus(),
+        event_hub=event_hub,
+    )
+    mcp_service = build_agentic_tool_registry(
+        llm_service, camera=camera, event_hub=event_hub
+    )
     session_manager = SessionManager(
         idle_timeout_seconds=_read_env_int(_ENV_IDLE_TIMEOUT, 300)
     )
@@ -95,8 +106,26 @@ def compose() -> FastAPI:
     app.add_api_route(HEALTH_ROUTE, _health, methods=["GET"])
     app.add_api_route(METRICS_ROUTE, _metrics(telemetry, llm_service), methods=["GET"])
     mount_dashboard(app, event_hub)
-    mount_camera_routes(app, camera)
+    mount_camera_routes(app, camera, watch=watch)
+    _attach_watchdog_lifespan(app, watch)
     return app
+
+
+def _attach_watchdog_lifespan(app: FastAPI, watch: AmbientWatchService) -> None:
+    """Start/stop the ambient watchdog with the ASGI application lifecycle."""
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        task = asyncio.create_task(watch.run())
+        yield
+        watch.stop()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    app.router.lifespan_context = lifespan
 
 
 async def _health() -> dict[str, str]:

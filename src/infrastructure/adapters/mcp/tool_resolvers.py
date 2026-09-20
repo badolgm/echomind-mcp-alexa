@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import re
+import time
 from binascii import Error as Base64Error
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -24,6 +25,7 @@ from src.infrastructure.adapters.mcp.fastapi_mcp_adapter import (
     InMemoryMCPServer,
     ToolHandler,
 )
+from src.infrastructure.config.event_hub import EventHub
 
 if TYPE_CHECKING:
     from src.infrastructure.adapters.iot.vivotek_adapter import (
@@ -245,6 +247,7 @@ def scan_ambient_signals(text: str) -> AmbientVerdict:
 def build_ambient_resolver(
     llm_service: LLMServicePort,
     camera: CameraFrameSource | None = None,
+    event_hub: EventHub | None = None,
 ) -> ToolHandler:
     """Return the Ambient Awareness resolver for continuous home monitoring.
 
@@ -253,7 +256,9 @@ def build_ambient_resolver(
     therefore reported even when the remote model is unavailable. When a
     camera frame source is supplied and no explicit media attachment is given,
     the latest live frame is attached automatically so Bedrock can ground its
-    analysis on the current view.
+    analysis on the current view. When an ``EventHub`` is supplied, every
+    analysis broadcasts a ``camera_alert`` event (risk, location, predicted
+    detections) so the Control Center can announce and overlay it live.
     """
 
     async def resolve(arguments: Mapping[str, Any]) -> MCPResponse:
@@ -295,9 +300,22 @@ def build_ambient_resolver(
                 f"{item['label']} [{item['confidence']:.2f}]" for item in detections
             )
             report = f"{report}\n- predicted detections: {labels}"
+        source = camera_frame.source if camera_frame is not None else "live"
         if camera is not None:
-            source = camera_frame.source if camera_frame is not None else "live"
             camera.record_detections([dict(item) for item in detections], source)
+        if event_hub is not None:
+            event_hub.publish(
+                {
+                    "kind": "camera_alert",
+                    "tool": _AMBIENT_TOOL_NAME,
+                    "status": verdict.risk_level,
+                    "risk": verdict.risk_level,
+                    "location": location,
+                    "source": source,
+                    "detections": [dict(item) for item in detections],
+                    "ts": time.time(),
+                }
+            )
         return MCPResponse(content=(MCPContentItem(kind="text", data=report),))
 
     return resolve
@@ -419,7 +437,9 @@ def build_reminder_resolver(book: ReminderBook) -> ToolHandler:
 
 
 def build_agentic_tool_registry(
-    llm_service: LLMServicePort, camera: CameraFrameSource | None = None
+    llm_service: LLMServicePort,
+    camera: CameraFrameSource | None = None,
+    event_hub: EventHub | None = None,
 ) -> InMemoryMCPServer:
     """Compose the default agentic tool registry for the ecosystem."""
     registry = InMemoryMCPServer()
@@ -436,7 +456,7 @@ def build_agentic_tool_registry(
             )
         elif agent_tool.name == _AMBIENT_TOOL_NAME:
             registry.register_agent_tool(
-                agent_tool, build_ambient_resolver(llm_service, camera)
+                agent_tool, build_ambient_resolver(llm_service, camera, event_hub)
             )
         else:
             registry.register_agent_tool(agent_tool, _echo_resolver)

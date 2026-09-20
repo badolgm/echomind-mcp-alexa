@@ -171,12 +171,20 @@ class VivotekCameraAdapter:
         await self._client.aclose()
 
 
-def mount_camera_routes(app: FastAPI, camera: CameraFrameSource | None = None) -> None:
+def mount_camera_routes(
+    app: FastAPI,
+    camera: CameraFrameSource | None = None,
+    watch: object | None = None,
+) -> None:
     """Register the Vivotek snapshot and detection endpoints on ``app``."""
     app.add_api_route("/api/cam/vivotek/snapshot", _snapshot(camera), methods=["GET"])
     app.add_api_route(
         "/api/cam/vivotek/detections", _detections(camera), methods=["GET"]
     )
+    if watch is not None:
+        app.add_api_route(
+            "/api/cam/vivotek/state", _vision_state(watch), methods=["GET"]
+        )
 
 
 def _snapshot(camera: CameraFrameSource | None):
@@ -222,5 +230,12 @@ def _detections(camera: CameraFrameSource | None):
                 "detections": camera.last_detections,
             }
         )
+
+    return handler
+
+
+def _vision_state(watch: object):
+    async def handler() -> dict[str, Any]:
+        return dict(getattr(watch, "last_state", {}))
 
     return handler

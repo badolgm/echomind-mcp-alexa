@@ -21,8 +21,10 @@ the home conversation:
 - **Anomaly & security** — smoke/fire indicators, intrusions and unknown persons.
 - **Multimodal grounding** — images, video, audio and PDF documents are fed straight to the model.
 - **Control Center** — an interactive dark-mode web dashboard (`/dashboard`) with live latency
-  sparklines, simulated camera feeds with detection boxes, the MCP pipeline viewer, a streaming
-  tools log (SSE) and a live **Quota Fallback Mode** badge.
+  sparklines, the **Dynamic Camera Viewer** (a physical Vivotek FD8367 feed plus simulated
+  scenes with detection boxes), the MCP pipeline viewer, a streaming tools log (SSE), a live
+  **Quota Fallback Mode** badge and an **autonomous AI watchdog** that predicts events (gate
+  open, pet escaping, smoke, rising temperature, motion) and **announces them aloud in Spanish**.
 
 Every snapshot is graded by a **deterministic safety gate** and by a reasoning model, so critical
 signals are never dropped — even when the cloud is not reachable.
@@ -34,6 +36,18 @@ Amazon Bedrock is the primary LLM provider. When AWS **throttles**, rejects **cr
 deterministic local rule engine that implements the same `LLMServicePort` contract. The MCP
 session with Alexa+ never breaks. Verified live: with zero AWS credentials on the host, the server
 still answered an ambient CRITICAL alert end-to-end.
+
+---
+
+## Hackathon alignment (Amazon Build, Ship, Shape 2026)
+
+- **Main track — Alexa+**: MCP **Streamable HTTP** server (spec `2025-11-25`), `alexa_skill/
+  skill.json` (**Agent Skills**) and the **EchoMind MCP Control Center**.
+- **AWS Builder mini-challenge**: multimodal vision via the **Amazon Bedrock Converse API**
+  (image/video/audio/document attachments) + **Graceful Fallback** resilience (`ResilientLLMAdapter`
+  → deterministic local rule engine through the **Quota Fallback Protocol**).
+- **Open Source mini-challenge**: public, fully documented repo; pure hexagonal/DDD layers; 100%
+  typed; offline suite **102/102 green** with `flake8` clean and `black` formatted.
 
 ---
 
@@ -101,6 +115,7 @@ declares its supported modalities. No media type leaks into the domain.
 │   │   ├── mcp/                   # fastapi_mcp_adapter.py · session_manager.py
 │   │   │                          # tool_resolvers.py
 │   │   └── config/                # telemetry.py (p50/p95/p99 metrics)
+│   ├── infrastructure/services/   # ambient_watch_service.py · sensor_bus.py
 │   └── main.py                    # composition root (IoC) + uvicorn entry
 ├── alexa_skill/skill.json         # Alexa+ Agent Skill manifest (MCP streamable)
 ├── Dockerfile / docker-compose.yml
@@ -144,6 +159,40 @@ interactive dark-mode dashboard (agent metrics with sparklines, live **Vivotek I
 AI-predicted detection boxes, simulated multimodal cameras, MCP pipeline viewer, live tools log via
 SSE and Bedrock/QFP utilization gauges). If the camera is unreachable the server serves a clean
 synthetic frame and the dashboard falls back to the simulated view.
+
+### Dashboard — EchoMind MCP Control Center (local)
+
+After booting the server, open [http://localhost:8000/dashboard](http://localhost:8000/dashboard).
+It subscribes to the SSE stream at `/dashboard/events` for the live tools log and polls `/metrics`
+every 2 s for the utilization gauges. The **Dynamic Camera Viewer** (`cam-select`) offers 4
+sources:
+
+- **CAM-01 · Vivotek FD8367** — the physical camera at `192.168.40.10` (`ECHOMIND_VIVOTEK_IP`)
+  exposed as a live feed.
+- **CAM-02 · Living Room**, **CAM-03 · Kitchen**, **CAM-04 · Patio / Outdoor** — agentic
+  simulations that cycle scenes and draw AI-predicted bounding boxes (PERSON / FALL / SMOKE /
+  PACKAGE…).
+
+For the physical camera, modern browsers cannot consume the FD8367's MJPEG stream natively
+(ActiveX plugin / CORS restrictions), so the backend `httpx` client acts as an **asynchronous
+reverse proxy**: `refreshLiveSnapshot()` in the dashboard requests
+`GET /api/cam/vivotek/snapshot` every **1.5 s** with a cache-busting `?t=<timestamp>` query param
+and paints each JPEG into the viewer. Critical predicted labels (FALL / SMOKE / FIRE / INTRUDER /
+GATE_OPEN / PET_ESCAPING / TEMP_RISING) raise an orange **ALERT**; while the camera is unreachable
+the viewer falls back to the clean synthetic test frame (`SIM FALLBACK`).
+
+**Autonomous AI watchdog.** `AmbientWatchService` runs in the background for the whole server
+lifetime. Every 3 s it merges real camera motion (`frame_delta_ratio` — the fraction of differing
+bytes between consecutive JPEG frames) with the home sensor bus (`SensorBus`: smoke density,
+temperature, gate/door reed switches, pet-collar telemetry, evolving on a deterministic 120 s
+scenario cycle) and computes an explainable risk verdict (smoke → MEDIUM/HIGH/CRITICAL, rising
+temperature → TEMP_RISING, gate open + pet at the exit → PET_ESCAPING, motion → MOTION).
+HIGH/CRITICAL verdicts **driven by a visual access trigger** (motion, `GATE_OPEN`,
+`PET_ESCAPING`) are broadcast as `camera_alert` events over the same SSE stream: the
+dashboard draws the prediction boxes, updates the live **AI Risk · Temp · Smoke · Gate · Motion**
+row (polled from `GET /api/cam/vivotek/state`) and **Alexa speaks the verdict in Spanish** via
+`speakAlexa()` (Web Speech API, es-ES/es-MX) — smoke/temperature never alarm on their own and a
+10 s cooldown blocks repeated identical announcements.
 
 > AWS credentials come from the standard chain (`~/.aws/credentials`, env vars, IAM role).
 > **Never commit credentials.** Without any credentials, the Quota Fallback Protocol keeps the
@@ -238,7 +287,7 @@ In-process round trips over the Streamable HTTP transport (this laptop, ASGI):
 ## Quality gates
 
 ```powershell
-pytest -q          # 79 tests
+pytest -q          # 102 tests
 flake8 src tests   # zero violations
 black --check src tests --line-length 88
 ```
@@ -254,6 +303,16 @@ black --check src tests --line-length 88
 - [x] **Phase 5** — Alexa+ skill manifest, observability (`/metrics`), Docker packaging, demo runner.
 - [x] **Phase 6** — EchoMind MCP Control Center: interactive web dashboard (SSE tools log, live metrics, QFP badge).
 - [x] **Phase 7** — Live Vivotek IP camera integration: real-time snapshot feed, graceful fallback frame, AI detection overlay on the dashboard.
+- [x] **Phase 8** — Autonomous ambient watchdog: background prediction engine (sensors + frame motion), proactive hot-word alerts and Spanish text-to-speech (`speakAlexa`).
+
+### Future roadmap
+
+- **WebRTC / RTSP-to-WebSocket** — migrate snapshot polling to a continuous low-latency video
+  channel, targeting sub-millisecond first-frame/refresh render times without a per-frame HTTP
+  round-trip (`/api/cam/vivotek/snapshot`).
+- **Predictive perimeter rules** — proactive `GATE_OPEN` detection (open gate/door) and perimeter
+  intrusion, escalating with immediate photographic evidence via **Alexa Push Notification /
+  Webhook**.
 
 ---
 
