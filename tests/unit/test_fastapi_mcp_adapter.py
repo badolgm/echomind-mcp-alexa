@@ -51,9 +51,10 @@ async def test_initialize_returns_capabilities_and_session(
 
     assert response.status_code == 200
     assert response.headers["Mcp-Session-Id"]
+    assert "event: endpoint" in response.text
     payload = _extract_payload(response.text)
     assert payload["id"] == 1
-    assert payload["result"]["protocolVersion"] == "2025-06-18"
+    assert payload["result"]["protocolVersion"] == "2025-11-25"
     assert payload["result"]["serverInfo"]["name"] == "echosystem"
 
 
@@ -146,5 +147,5 @@ async def test_missing_session_is_rejected(streamable_app: FastAPI) -> None:
 
 def _extract_payload(body: str) -> dict[str, Any]:
     data_lines = [line[5:] for line in body.splitlines() if line.startswith("data:")]
-    raw = data_lines[0] if data_lines else body
+    raw = data_lines[-1] if data_lines else body
     return json.loads(raw)

@@ -2,25 +2,32 @@
 
 This module implements the Model Context Protocol HTTP *Streamable* transport
 over a FastAPI application. It exposes the JSON-RPC 2.0 subset needed by an
-MCP client: initialize, notifications/initialized, tools/list and tools/call.
+MCP client: initialize, notifications/initialized, tools/list and tools/call,
+following the 2025 session negotiation flow:
+
+  1. The client POSTs ``initialize``; the server creates a persistent session,
+     announces it through the ``Mcp-Session-Id`` header and answers with an
+     SSE stream carrying an ``endpoint`` event plus the JSON-RPC result.
+  2. The client POSTs ``notifications/initialized`` to mark the session ready.
+  3. JSON-RPC requests travel over POST; server-initiated messages and the
+     ``endpoint`` event are delivered over the GET SSE stream.
 
 Two classes with a single responsibility each:
   - InMemoryMCPServer: in-memory MCPServerPort implementation (tool registry).
-  - FastAPIMCPServer:      FastAPI application exposing the Streamable HTTP
-                            transport on top of any MCPServerPort.
+  - FastAPIMCPServer:  FastAPI application exposing the Streamable HTTP
+                       transport on top of any MCPServerPort and any
+                       SessionManager.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import FastAPI, Header, Request, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.domain.models.tools import AgentTool
 from src.domain.ports.output.mcp_port import (
@@ -29,9 +36,14 @@ from src.domain.ports.output.mcp_port import (
     MCPResponse,
     MCPTool,
 )
+from src.infrastructure.adapters.mcp.session_manager import (
+    McpSession,
+    SessionManager,
+    SessionStatus,
+)
 
 JSON_RPC_VERSION = "2.0"
-MCP_PROTOCOL_VERSION = "2025-06-18"
+MCP_PROTOCOL_VERSION = "2025-11-25"
 SERVER_NAME = "echosystem"
 SERVER_VERSION = "0.1.0"
 SESSION_HEADER = "Mcp-Session-Id"
@@ -68,12 +80,8 @@ def _as_sse_event(payload: Mapping[str, Any]) -> str:
     return f"event: message\ndata: {json.dumps(payload)}\n\n"
 
 
-@dataclass
-class _McpSession:
-    """Transport-level session holding a per-client event queue."""
-
-    session_id: str
-    events: asyncio.Queue[dict[str, Any]] = field(default_factory=asyncio.Queue)
+def _as_endpoint_event(endpoint: str) -> str:
+    return f"event: endpoint\ndata: {json.dumps({'endpoint': endpoint})}\n\n"
 
 
 class InMemoryMCPServer(MCPServerPort):
@@ -114,47 +122,83 @@ class InMemoryMCPServer(MCPServerPort):
 class FastAPIMCPServer:
     """Exposes any MCPServerPort over MCP Streamable HTTP using FastAPI.
 
-    The resulting ``app`` attribute can be served with uvicorn or mounted in a
-    larger FastAPI application::
+    Session lifecycle is delegated to a :class:`SessionManager`; sessions are
+    created during ``initialize``, annotated via ``notifications/initialized``,
+    kept warm by the GET SSE stream and finally destroyed when the stream ends
+    or the session idles out::
 
-        server = FastAPIMCPServer(mcp_service=my_port)
+        registry = build_agentic_tool_registry(llm_service)
+        sessions = SessionManager()
+        server = FastAPIMCPServer(
+            mcp_service=registry, session_manager=sessions
+        )
         app = server.app
     """
 
     def __init__(
-        self, *, mcp_service: MCPServerPort, endpoint: str = DEFAULT_ENDPOINT
+        self,
+        *,
+        mcp_service: MCPServerPort,
+        session_manager: SessionManager | None = None,
+        endpoint: str = DEFAULT_ENDPOINT,
+        keepalive_seconds: int = 15,
     ) -> None:
         self._mcp_service = mcp_service
+        self._session_manager = session_manager or SessionManager()
         self._endpoint = endpoint
-        self._sessions: dict[str, _McpSession] = {}
+        self._keepalive_seconds = keepalive_seconds
         self.app = FastAPI(
             title=f"{SERVER_NAME} MCP Streamable HTTP", version=SERVER_VERSION
         )
-        self._register_routes()
-
-    def _register_routes(self) -> None:
         self.app.add_api_route(self._endpoint, self._read_stream, methods=["GET"])
         self.app.add_api_route(self._endpoint, self._post_message, methods=["POST"])
 
-    async def _read_stream(self, request: Request) -> StreamingResponse:
-        session_id = str(uuid.uuid4())
-        session = _McpSession(session_id=session_id)
-        self._sessions[session_id] = session
+    def expire_stale_sessions(self) -> int:
+        return self._session_manager.expire_stale()
+
+    async def _read_stream(
+        self,
+        request: Request,
+        session_id: str | None = None,
+        mcp_session_id: str | None = Header(default=None, alias=SESSION_HEADER),
+    ) -> Response:
+        session = self._session_manager.get(session_id or mcp_session_id)
+        if session is None or session.status is SessionStatus.CLOSED:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "jsonrpc": JSON_RPC_VERSION,
+                    "error": {"code": -32001, "message": "unknown or expired session"},
+                },
+            )
+        self._session_manager.touch(session)
         return StreamingResponse(
             self._stream_events(session),
             media_type="text/event-stream",
-            headers={SESSION_HEADER: session_id},
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+                SESSION_HEADER: session.session_id,
+            },
         )
 
-    async def _stream_events(self, session: _McpSession) -> AsyncIterator[str]:
+    async def _stream_events(self, session: McpSession) -> AsyncIterator[str]:
+        yield _as_endpoint_event(self._endpoint)
         try:
-            while True:
-                payload = await session.events.get()
+            while session.status is not SessionStatus.CLOSED:
+                try:
+                    payload = await asyncio.wait_for(
+                        session.events.get(), timeout=self._keepalive_seconds
+                    )
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+                    continue
                 if payload.get("close") is True:
                     break
                 yield _as_sse_event(payload)
         finally:
-            self._sessions.pop(session.session_id, None)
+            self._session_manager.destroy(session.session_id)
 
     async def _post_message(
         self,
@@ -169,54 +213,91 @@ class FastAPIMCPServer:
             return Response(
                 status_code=400, content="JSON-RPC payload must be an object."
             )
+        return await self._dispatch(payload, mcp_session_id, request)
 
-        output, session_id = await self._handle(payload, mcp_session_id)
-        headers = {SESSION_HEADER: session_id} if session_id else {}
+    async def _dispatch(
+        self,
+        payload: dict[str, Any],
+        session_id: str | None,
+        request: Request,
+    ) -> Response:
+        method = payload.get("method")
+
+        if method == "initialize":
+            return await self._initialize(payload, session_id, request)
+
+        session = self._session_manager.get(session_id)
+        if session is None:
+            return self._json_error_response(payload.get("id"), -32000)
+        if session.status is SessionStatus.CLOSED:
+            return self._json_error_response(payload.get("id"), -32001)
+
+        self._session_manager.touch(session)
+        output = await self._handle(payload, session)
+        session_id = session.session_id
         if output is None:
-            return Response(status_code=202, headers=headers)
+            return Response(status_code=202, headers={SESSION_HEADER: session_id})
         if "text/event-stream" in request.headers.get("accept", ""):
             return Response(
                 content=_as_sse_event(output),
                 media_type="text/event-stream",
-                headers=headers,
+                headers={SESSION_HEADER: session_id},
             )
         return Response(
-            content=json.dumps(output), media_type="application/json", headers=headers
+            content=json.dumps(output),
+            media_type="application/json",
+            headers={SESSION_HEADER: session_id},
         )
 
-    async def _handle(
-        self, payload: dict[str, Any], session_id: str | None
-    ) -> tuple[dict[str, Any] | None, str | None]:
-        method = payload.get("method")
+    async def _initialize(
+        self, payload: dict[str, Any], session_id: str | None, request: Request
+    ) -> Response:
+        session = self._session_manager.get(session_id) or (
+            self._session_manager.create()
+        )
+        session.mark_initialized(MCP_PROTOCOL_VERSION)
+        self._session_manager.touch(session)
         request_id = payload.get("id")
-        session = self._sessions.get(session_id or "")
-
-        if method == "initialize":
-            if session is None:
-                session_id = str(uuid.uuid4())
-                self._sessions[session_id] = _McpSession(session_id=session_id)
-            result = {
+        result = _json_rpc_response(
+            request_id,
+            {
                 "protocolVersion": MCP_PROTOCOL_VERSION,
                 "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-            }
-            return _json_rpc_response(request_id, result), session_id
+            },
+        )
+        base_url = str(request.base_url).rstrip("/")
+        body = _as_endpoint_event(f"{base_url}{self._endpoint}") + _as_sse_event(result)
+        return Response(
+            content=body,
+            media_type="text/event-stream",
+            headers={SESSION_HEADER: session.session_id},
+        )
 
-        if session is None:
-            return (
-                _json_rpc_error(
-                    request_id, -32000, "no active MCP session; call initialize first"
-                ),
-                None,
-            )
+    def _json_error_response(
+        self, request_id: int | str, code: int, message: str | None = None
+    ) -> JSONResponse:
+        if code == -32000:
+            message = "no active MCP session; call initialize first"
+        elif code == -32001:
+            message = "session has been terminated"
+        return JSONResponse(content=_json_rpc_error(request_id, code, message))
+
+    async def _handle(
+        self, payload: dict[str, Any], session: McpSession
+    ) -> dict[str, Any] | None:
+        method = payload.get("method")
+        request_id = payload.get("id")
 
         if method == "ping":
-            return _json_rpc_response(request_id, {}), session_id
+            return _json_rpc_response(request_id, {})
 
-        if method == "notifications/initialized" or (
-            isinstance(method, str) and method.startswith("notifications/")
-        ):
-            return None, session_id
+        if method == "notifications/initialized":
+            session.mark_initialized(MCP_PROTOCOL_VERSION)
+            self._session_manager.touch(session)
+            return None
+        if isinstance(method, str) and method.startswith("notifications/"):
+            return None
 
         if method == "tools/list":
             tools = [
@@ -227,43 +308,36 @@ class FastAPIMCPServer:
                 }
                 for tool in await self._mcp_service.list_tools()
             ]
-            return _json_rpc_response(request_id, {"tools": tools}), session_id
+            return _json_rpc_response(request_id, {"tools": tools})
 
         if method == "tools/call":
-            params = payload.get("params")
-            if not isinstance(params, dict):
-                return (
-                    _json_rpc_error(
-                        request_id, -32602, "tools/call requires a params object"
-                    ),
-                    session_id,
-                )
-            name = params.get("name")
-            arguments = params.get("arguments") or {}
-            if not isinstance(name, str):
-                return (
-                    _json_rpc_error(
-                        request_id, -32602, "tools/call requires a string tool name"
-                    ),
-                    session_id,
-                )
-            if not isinstance(arguments, dict):
-                return (
-                    _json_rpc_error(
-                        request_id, -32602, "tool arguments must be an object"
-                    ),
-                    session_id,
-                )
-            response = await self._mcp_service.call_tool(name, arguments)
-            result = {
-                "content": [
-                    {"type": item.kind, "text": item.data} for item in response.content
-                ],
-                "isError": response.is_error,
-            }
-            return _json_rpc_response(request_id, result), session_id
+            return await self._call_tool(payload, request_id)
 
-        return (
-            _json_rpc_error(request_id, -32601, f"method not found: {method}"),
-            session_id,
-        )
+        return _json_rpc_error(request_id, -32601, f"method not found: {method}")
+
+    async def _call_tool(
+        self, payload: dict[str, Any], request_id: int | str | None
+    ) -> dict[str, Any]:
+        params = payload.get("params")
+        if not isinstance(params, dict):
+            return _json_rpc_error(
+                request_id, -32602, "tools/call requires a params object"
+            )
+        name = params.get("name")
+        arguments = params.get("arguments") or {}
+        if not isinstance(name, str):
+            return _json_rpc_error(
+                request_id, -32602, "tools/call requires a string tool name"
+            )
+        if not isinstance(arguments, dict):
+            return _json_rpc_error(
+                request_id, -32602, "tool arguments must be an object"
+            )
+        response = await self._mcp_service.call_tool(name, arguments)
+        result = {
+            "content": [
+                {"type": item.kind, "text": item.data} for item in response.content
+            ],
+            "isError": response.is_error,
+        }
+        return _json_rpc_response(request_id, result)

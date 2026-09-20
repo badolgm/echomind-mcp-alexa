@@ -202,7 +202,7 @@ async def test_json_rpc_tools_call_reaches_agentic_registry() -> None:
 
 def _extract_payload(body: str) -> dict[str, Any]:
     data_lines = [line[5:] for line in body.splitlines() if line.startswith("data:")]
-    raw = data_lines[0] if data_lines else body
+    raw = data_lines[-1] if data_lines else body
     return json.loads(raw)
 
 
