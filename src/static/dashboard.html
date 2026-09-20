@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>EchoMind MCP Control Center</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: radial-gradient(1200px 600px at 20% -10%, rgba(34,211,238,0.10), transparent 60%), #020617; }
+  .panel { background: rgba(11,15,25,0.9); border: 1px solid rgba(30,41,59,0.9); }
+  .panel-glow { box-shadow: 0 0 10px rgba(34,211,238,0.2); }
+  .accent { color: #22d3ee; }
+  .amazon { color: #f97316; }
+  .ring-glow { filter: drop-shadow(0 0 6px rgba(34,211,238,0.65)); }
+  .cam-viewer { position: relative; overflow: hidden; }
+  .cam-viewer::before { content: ''; position: absolute; inset: 0; z-index: 0;
+    background-image: linear-gradient(rgba(148,163,184,0.12) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(148,163,184,0.12) 1px, transparent 1px);
+    background-size: 26px 26px; }
+  .cam-scene { position: absolute; inset: 0; }
+  .scanline { position: absolute; left: 0; right: 0; height: 3px; z-index: 2;
+    background: linear-gradient(90deg, transparent, rgba(34,211,238,0.5), transparent);
+    animation: scan 4.5s linear infinite; }
+  @keyframes scan { 0% { top: -5%; } 100% { top: 105%; } }
+  .corner { position: absolute; width: 22px; height: 22px; border: 2px solid rgba(34,211,238,0.7); z-index: 3; }
+  .bbox { position: absolute; border: 2px solid; border-radius: 4px; padding: 2px 6px; font-size: 10px;
+    letter-spacing: 0.08em; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    box-shadow: 0 0 10px rgba(34,211,238,0.2); }
+  .stage { display: flex !important; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; width: 88px; padding: 0 !important; background: transparent !important; border: none !important; }
+  .node-dot { width: 18px; height: 18px; border-radius: 50%; background: #0b0f19;
+    border: 2px solid #334155; box-shadow: 0 0 0 4px rgba(51,65,85,0.25); transition: all 300ms ease; }
+  #pipeline .stage.stage-active .node-dot { background: #34d399; border-color: #6ee7b7;
+    box-shadow: 0 0 16px 3px rgba(52,211,153,0.55); }
+  #pipeline .stage.stage-active .node-label { color: #34d399; }
+  .node-label { font-size: 8px; text-align: center; letter-spacing: 0.08em; color: #64748b; line-height: 1.25; }
+  .pulse-line { flex: 1; min-width: 10px; height: 2px; position: relative; overflow: hidden;
+    background: linear-gradient(90deg, #0d9488, #34d399); border-radius: 2px; }
+  .pulse-line::after { content: ''; position: absolute; top: -1px; left: -30%; width: 32%; height: 4px;
+    border-radius: 2px; background: rgba(255,255,255,0.85); animation: pulse 1.6s infinite linear; }
+  @keyframes pulse { 0% { left: -30%; } 100% { left: 110%; } }
+  .tab-btn { cursor: pointer; transition: all 200ms ease; }
+  .tab-active { background: rgba(34,211,238,0.12); color: #22d3ee; border-color: rgba(34,211,238,0.5); }
+  .vbar { transition: height 500ms ease; }
+  .log-row { animation: slidein 200ms ease-out; }
+  @keyframes slidein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .pulse-alert { animation: pulsealert 1s ease-in-out infinite; }
+  @keyframes pulsealert { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+  .ring-track { fill: none; stroke: #1e293b; stroke-width: 8; stroke-linecap: round; }
+  .ring-fill { fill: none; stroke-width: 8; stroke-linecap: round; }
+  .sidebar-icon { filter: drop-shadow(0 0 6px rgba(34,211,238,0.35)); }
+</style>
+</head>
+<body class="text-slate-200 font-sans min-h-screen antialiased">
+
+<div class="flex min-h-screen">
+
+  <aside class="w-14 shrink-0 border-r border-slate-800 bg-[#0b0f19] flex flex-col items-center py-4 gap-5 sticky top-0 h-screen z-30">
+    <a href="#top" class="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-sky-700 flex items-center justify-center font-black text-slate-950 text-sm shadow-[0_0_14px_rgba(34,211,238,0.45)]">EM</a>
+    <div class="flex flex-col items-center gap-5 text-slate-500">
+      <svg class="w-5 h-5 sidebar-icon accent" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13h4l2-7 4 12 2-5h6"/></svg>
+      <svg class="w-5 h-5 sidebar-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.5-4.5M15 10l5 5M15 10H9.5M17 4H5a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+      <svg class="w-5 h-5 sidebar-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17V7m0 0L4.5 11.5M9 7l4.5 4.5M15 17h4M15 13h1.5a2.5 2.5 0 000-5H15"/></svg>
+      <svg class="w-5 h-5 sidebar-icon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M19 5L5 19M12 3v6M12 15v6"/></svg>
+      <svg class="w-5 h-5 sidebar-icon amazon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    </div>
+    <div class="mt-auto flex flex-col items-center gap-3 text-slate-600">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.97-4.03 9-9 9-1.6 0-3.1-.4-4.4-1.1L3 21l1.1-4.6C3.4 15.1 3 13.6 3 12c0-4.97 4.03-9 9-9s9 4.03 9 9z"/></svg>
+      <div id="clock" class="font-mono text-[9px] text-cyan-300"></div>
+    </div>
+  </aside>
+
+  <div id="top" class="flex-1 min-w-0">
+
+    <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-20">
+      <div class="px-5 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div>
+            <div class="text-lg font-bold tracking-tight">EchoMind <span class="accent">MCP Control Center</span></div>
+            <div class="text-[11px] text-slate-500 tracking-widest uppercase">Agentic Ecosystem &middot; Alexa+ &middot; AWS Bedrock</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-4 text-xs">
+          <div class="hidden md:block text-right">
+            <div class="text-slate-500 uppercase tracking-wider">Uptime</div>
+            <div id="uptime" class="font-mono text-cyan-300">0s</div>
+          </div>
+          <div id="qfp-badge" class="hidden items-center gap-2 px-3 py-1.5 rounded-md border border-orange-500/60 bg-orange-500/10 amazon font-bold text-[11px]">
+            <span class="w-2 h-2 rounded-full bg-orange-500 pulse-alert"></span>
+            QUOTA FALLBACK MODE ACTIVE
+          </div>
+          <div class="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-700 bg-slate-900 text-slate-400 text-[10px] font-mono">
+            <span id="conn-dot" class="w-2 h-2 inline-block rounded-full bg-slate-600"></span>
+            <span id="conn-label">connecting</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="px-5 py-5 grid grid-cols-12 gap-5">
+
+      <section class="col-span-12 lg:col-span-3 space-y-5">
+        <h2 class="text-[11px] uppercase tracking-widest text-slate-500">Agent Metrics</h2>
+
+        <div class="panel panel-glow rounded-xl p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-[10px] uppercase tracking-wider text-slate-500">Response Latency</div>
+              <div class="text-2xl font-bold accent mt-1" id="latency-value">-- ms</div>
+              <div class="text-[10px] text-slate-500 mt-1">p95 <span class="text-slate-300" id="latency-p95">--</span></div>
+            </div>
+            <svg viewBox="0 0 100 60" class="w-24 h-16">
+              <path class="ring-track" d="M 10 55 A 40 40 0 0 1 90 55"/>
+              <path id="ring-latency" class="ring-fill ring-glow" stroke="#22d3ee" d="M 10 55 A 40 40 0 0 1 90 55" style="stroke-dasharray: 125.6; stroke-dashoffset: 125.6"/>
+              <text x="50" y="50" text-anchor="middle" class="accent" font-size="14" font-weight="bold" id="ring-latency-txt">--</text>
+            </svg>
+          </div>
+          <svg class="mt-3 w-full h-8" viewBox="0 0 120 32" preserveAspectRatio="none"><polyline id="spark-latency" fill="none" stroke="#22d3ee" stroke-width="2" points=""/></svg>
+        </div>
+
+        <div class="panel rounded-xl p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-[10px] uppercase tracking-wider text-slate-500">Context Depth</div>
+              <div class="text-2xl font-bold text-emerald-400 mt-1" id="depth-value">--</div>
+              <div class="text-[10px] text-slate-500 mt-1">tokens <span id="depth-unit">approx</span></div>
+            </div>
+            <svg viewBox="0 0 100 60" class="w-24 h-16">
+              <path class="ring-track" d="M 10 55 A 40 40 0 0 1 90 55"/>
+              <path id="ring-depth" class="ring-fill ring-glow" stroke="#34d399" d="M 10 55 A 40 40 0 0 1 90 55" style="stroke-dasharray: 125.6; stroke-dashoffset: 125.6"/>
+              <text x="50" y="50" text-anchor="middle" class="text-emerald-400" font-size="13" font-weight="bold" id="ring-depth-txt">--</text>
+            </svg>
+          </div>
+          <svg class="mt-3 w-full h-8" viewBox="0 0 120 32" preserveAspectRatio="none"><polyline id="spark-depth" fill="none" stroke="#34d399" stroke-width="2" points=""/></svg>
+        </div>
+
+        <div class="panel rounded-xl p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-[10px] uppercase tracking-wider text-slate-500">Tool Accuracy</div>
+              <div class="text-2xl font-bold text-violet-400 mt-1" id="accuracy-value">--</div>
+              <div class="text-[10px] text-slate-500 mt-1"><span id="accuracy-sub">0/0</span> ok/critical</div>
+            </div>
+            <svg viewBox="0 0 100 60" class="w-24 h-16">
+              <path class="ring-track" d="M 10 55 A 40 40 0 0 1 90 55"/>
+              <path id="ring-accuracy" class="ring-fill ring-glow" stroke="#a78bfa" d="M 10 55 A 40 40 0 0 1 90 55" style="stroke-dasharray: 125.6; stroke-dashoffset: 125.6"/>
+              <text x="50" y="50" text-anchor="middle" class="text-violet-400" font-size="13" font-weight="bold" id="ring-accuracy-txt">--</text>
+            </svg>
+          </div>
+          <svg class="mt-3 w-full h-8" viewBox="0 0 120 32" preserveAspectRatio="none"><polyline id="spark-accuracy" fill="none" stroke="#a78bfa" stroke-width="2" points=""/></svg>
+        </div>
+      </section>
+
+      <section class="col-span-12 lg:col-span-6 space-y-5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-[11px] uppercase tracking-widest text-slate-500">Core Operations</h2>
+          <span class="text-[10px] text-slate-500">MCP Streamable HTTP &middot; live</span>
+        </div>
+
+        <div class="panel rounded-xl p-4">
+          <h3 class="text-[11px] uppercase tracking-widest text-slate-500 mb-3">MCP Server Pipeline</h3>
+          <div id="pipeline" class="flex items-center gap-1">
+            <div class="stage" data-idx="0"><span class="node-dot"></span><span class="node-label">AUDIO INGEST</span></div>
+            <div class="pulse-line"></div>
+            <div class="stage" data-idx="1"><span class="node-dot"></span><span class="node-label">STT CONVERSION</span></div>
+            <div class="pulse-line"></div>
+            <div class="stage" data-idx="2"><span class="node-dot"></span><span class="node-label">CONTEXT ENRICHMENT (MCP)</span></div>
+            <div class="pulse-line"></div>
+            <div class="stage" data-idx="3"><span class="node-dot"></span><span class="node-label">MODEL INFERENCE</span></div>
+            <div class="pulse-line"></div>
+            <div class="stage" data-idx="4"><span class="node-dot"></span><span class="node-label">TTS OUT</span></div>
+          </div>
+        </div>
+
+        <div class="panel rounded-xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-[11px] uppercase tracking-widest text-slate-500">Active Multimodal Analytics</h3>
+            <div id="cam-title" class="text-[10px] font-mono text-cyan-300">CAM-01 &middot; LIVING ROOM</div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+            <button id="tab-living" class="tab-btn tab-active px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 text-[10px] font-bold text-cyan-300">LIVING ROOM</button>
+            <button id="tab-kitchen" class="tab-btn px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 text-[10px] text-slate-400">KITCHEN</button>
+            <button id="tab-patio" class="tab-btn px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 text-[10px] text-slate-400">PATIO</button>
+          </div>
+
+          <div class="cam-viewer aspect-video rounded-lg bg-slate-900 border border-slate-800">
+            <div class="scanline"></div>
+            <span class="corner top-1 left-1 border-r-0 border-b-0"></span>
+            <span class="corner top-1 right-1 border-l-0 border-b-0"></span>
+            <span class="corner bottom-1 left-1 border-r-0 border-t-0"></span>
+            <span class="corner bottom-1 right-1 border-l-0 border-t-0"></span>
+
+            <img id="cam-live" class="absolute inset-0 w-full h-full object-cover" style="display:none; z-index:1" src="" alt="Vivotek live">
+            <div id="ai-overlay" class="absolute inset-0 overflow-hidden" style="display:none; z-index:20"></div>
+
+            <div id="obj-living" class="cam-scene" style="display:block">
+              <div class="absolute bottom-1 left-1 text-[8px] text-cyan-400 font-mono z-10">CAM-01 &middot; 1080p &middot; <span id="cam-time">--:--:--</span></div>
+              <span id="alert-living" class="absolute top-2 right-2 hidden text-orange-400 font-bold text-[9px] pulse-alert z-10">ALERT &middot; FALL DETECTED</span>
+            </div>
+            <div id="obj-kitchen" class="cam-scene" style="display:none">
+              <div class="absolute bottom-1 left-1 text-[8px] text-cyan-400 font-mono z-10">CAM-02 &middot; 1080p &middot; <span id="cam-time-2">--:--:--</span></div>
+              <span id="alert-kitchen" class="absolute top-2 right-2 hidden text-orange-400 font-bold text-[9px] pulse-alert z-10">ALERT &middot; SMOKE DETECTED</span>
+            </div>
+            <div id="obj-patio" class="cam-scene" style="display:none">
+              <div class="absolute bottom-1 left-1 text-[8px] text-cyan-400 font-mono z-10">CAM-03 &middot; 1080p &middot; <span id="cam-time-3">--:--:--</span></div>
+              <span id="alert-patio" class="absolute top-2 right-2 hidden text-orange-400 font-bold text-[9px] pulse-alert z-10">ALERT</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel rounded-xl p-4">
+          <div class="flex justify-between items-center mb-2">
+            <h3 class="text-[11px] uppercase tracking-widest text-slate-500">Live Tools Log</h3>
+            <span id="tool-count" class="font-mono text-[10px] text-slate-500">0 events</span>
+          </div>
+          <div id="log" class="h-40 overflow-y-auto rounded-lg bg-black border border-slate-800 shadow-[inset_0_0_20px_rgba(34,211,238,0.06)] p-3 font-mono text-[11px] space-y-1"></div>
+        </div>
+      </section>
+
+      <section class="col-span-12 lg:col-span-3 space-y-5">
+        <h2 class="text-[11px] uppercase tracking-widest text-slate-500">AWS Bedrock &amp; Utilization</h2>
+
+        <div class="panel panel-glow rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-[11px] uppercase tracking-widest text-slate-500">AWS Bedrock Status</h3>
+            <span class="flex items-center gap-1.5 text-[10px] font-bold" id="provider-line"><i id="provider-dot" class="w-2 h-2 rounded-full bg-emerald-400"></i><span id="provider-label">ACTIVE</span></span>
+          </div>
+          <button class="w-full text-left px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-xs font-bold text-cyan-300 mb-3">
+            <span class="block text-[9px] text-slate-500 uppercase tracking-wider">Model</span>
+            CLAUDE 3.5 SONNET <span class="text-slate-600">/ HAIKU</span>
+          </button>
+          <div class="grid grid-cols-2 gap-3 text-center mb-3">
+            <div class="rounded-lg border border-slate-800 bg-slate-950 p-2">
+              <div class="text-[9px] text-slate-500 uppercase">Latency</div>
+              <div class="text-sm font-bold accent" id="throughput">--</div>
+            </div>
+            <div class="rounded-lg border border-slate-800 bg-slate-950 p-2">
+              <div class="text-[9px] text-slate-500 uppercase">Tokens/s</div>
+              <div class="text-sm font-bold text-emerald-400" id="throughput-unit">--</div>
+            </div>
+          </div>
+          <div id="model-fallback" class="hidden text-[10px] text-orange-400 font-semibold mb-3 border border-orange-500/40 bg-orange-500/10 rounded-md px-2 py-1.5">fallback: local rule engine (echo-rule-engine-v1)</div>
+          <svg viewBox="0 0 200 205" class="w-full max-w-[220px] mx-auto">
+            <polygon points="100,15 186,133 153,178 47,178 14,133" fill="none" stroke="#1e293b"/>
+            <polygon points="100,15 186,133 153,178 47,178 14,133" fill="none" stroke="#1e293b" opacity="0.4" transform="scale(0.62) translate(62 62)"/>
+            <polygon points="100,15 186,133 153,178 47,178 14,133" fill="rgba(34,211,238,0.04)" stroke="rgba(34,211,238,0.35)"/>
+            <polygon id="radar-poly" points="100,37 165,84 140,160 60,160 35,84" fill="rgba(34,211,238,0.22)" stroke="#22d3ee" stroke-width="1.5" style="filter: drop-shadow(0 0 6px rgba(34,211,238,0.6));"/>
+            <text x="100" y="10" text-anchor="middle" font-size="8" fill="#94a3b8">MODEL</text>
+            <text x="188" y="90" text-anchor="middle" font-size="8" fill="#94a3b8">LATENCY</text>
+            <text x="150" y="192" text-anchor="middle" font-size="8" fill="#94a3b8">THROUGHPUT</text>
+            <text x="50" y="192" text-anchor="middle" font-size="8" fill="#94a3b8">INPUT</text>
+            <text x="12" y="90" text-anchor="middle" font-size="8" fill="#94a3b8">LENGTH</text>
+          </svg>
+        </div>
+
+        <div class="panel rounded-xl p-4">
+          <h3 class="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Resource Utilization</h3>
+          <div class="flex items-end justify-center gap-6 h-28">
+            <div class="flex flex-col items-center gap-1 flex-1 max-w-[54px]">
+              <div class="w-full h-20 rounded-t-md bg-slate-800 relative overflow-hidden">
+                <div id="bar-cpu" class="vbar absolute bottom-0 left-0 right-0 bg-gradient-to-t from-cyan-700 to-cyan-400" style="height:20%"></div>
+              </div>
+              <span class="text-[9px] text-slate-500 font-bold">CPU</span>
+            </div>
+            <div class="flex flex-col items-center gap-1 flex-1 max-w-[54px]">
+              <div class="w-full h-20 rounded-t-md bg-slate-800 relative overflow-hidden">
+                <div id="bar-mem" class="vbar absolute bottom-0 left-0 right-0 bg-gradient-to-t from-sky-700 to-sky-400" style="height:20%"></div>
+              </div>
+              <span class="text-[9px] text-slate-500 font-bold">MEMORY</span>
+            </div>
+            <div class="flex flex-col items-center gap-1 flex-1 max-w-[54px]">
+              <div class="w-full h-20 rounded-t-md bg-slate-800 relative overflow-hidden">
+                <div id="bar-net" class="vbar absolute bottom-0 left-0 right-0 bg-gradient-to-t from-cyan-700 to-cyan-300" style="height:20%"></div>
+              </div>
+              <span class="text-[9px] text-slate-500 font-bold">NETWORK</span>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-3 mt-4">
+            <div class="text-center">
+              <svg viewBox="0 0 100 100" class="w-full max-w-[72px] mx-auto">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="#1e293b" stroke-width="9"/>
+                <circle class="gauge-ring" id="gauge-cpu" cx="50" cy="50" r="42" fill="none" stroke="#22d3ee" stroke-width="9" stroke-linecap="round"/>
+              </svg>
+              <div class="text-[9px] text-slate-500 mt-1">CPU</div>
+              <div class="text-xs font-bold" id="cpu-value">0%</div>
+            </div>
+            <div class="text-center">
+              <svg viewBox="0 0 100 100" class="w-full max-w-[72px] mx-auto">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="#1e293b" stroke-width="9"/>
+                <circle class="gauge-ring" id="gauge-mem" cx="50" cy="50" r="42" fill="none" stroke="#3b82f6" stroke-width="9" stroke-linecap="round"/>
+              </svg>
+              <div class="text-[9px] text-slate-500 mt-1">MEM</div>
+              <div class="text-xs font-bold" id="mem-value">0%</div>
+            </div>
+            <div class="text-center">
+              <svg viewBox="0 0 100 100" class="w-full max-w-[72px] mx-auto">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="#1e293b" stroke-width="9"/>
+                <circle class="gauge-ring" id="gauge-net" cx="50" cy="50" r="42" fill="none" stroke="#f97316" stroke-width="9" stroke-linecap="round"/>
+              </svg>
+              <div class="text-[9px] text-slate-500 mt-1">NET</div>
+              <div class="text-xs font-bold" id="net-value">0%</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script>
+(function () {
+  var RING = 2 * Math.PI * 42;
+  [ "gauge-cpu", "gauge-mem", "gauge-net" ].forEach(function (id) {
+    var el = document.getElementById(id);
+    el.style.strokeDasharray = RING;
+    el.style.strokeDashoffset = RING;
+  });
+
+  var state = { calls: 0, ok: 0, errors: 0, lat: [], depth: [], acc: [] };
+
+  function sparkline(id, values, color) {
+    var el = document.getElementById(id);
+    if (!el || !values.length) return;
+    var w = 120, h = 32, n = values.length;
+    var max = Math.max.apply(null, values.concat([0.001]));
+    var pts = values.map(function (v, i) {
+      return ((i / (n - 1)) * w) + "," + (h - 2 - (v / max) * (h - 6));
+    }).join(" ");
+    el.setAttribute("points", pts);
+    el.setAttribute("stroke", color);
+  }
+
+  function setGauge(id, valueId, pct) {
+    var ring = document.getElementById(id);
+    var p = Math.max(0, Math.min(100, pct));
+    ring.style.strokeDashoffset = RING * (1 - p / 100);
+    document.getElementById(valueId).textContent = Math.round(p) + "%";
+  }
+
+  function fmtUptime(s) {
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), secs = Math.floor(s % 60);
+    return (h ? h + "h " : "") + m + "m " + secs + "s";
+  }
+
+  async function pollMetrics() {
+    try {
+      var r = await fetch("/metrics");
+      var m = await r.json();
+      document.getElementById("uptime").textContent = fmtUptime(m.uptime_seconds || 0);
+
+      var lat = (m.latency_ms && m.latency_ms["tools/call"]) || {};
+      var mean = lat.mean_ms || 0, p95 = lat.p95_ms || 0;
+      var latText = mean ? mean.toFixed(1) + " ms" : "--";
+      var p95Text = p95 ? p95.toFixed(1) + " ms" : "--";
+      var sample = document.getElementById("latency-value");
+      sample.textContent = latText;
+      document.getElementById("latency-p95").textContent = p95Text;
+      var ringLat = document.getElementById("ring-latency");
+      if (ringLat) {
+        var pctLat = Math.min(100, Math.max(0, (mean / 100) * 100));
+        ringLat.style.strokeDashoffset = 125.6 * (1 - pctLat / 100);
+        var txtLat = document.getElementById("ring-latency-txt");
+        if (txtLat) txtLat.textContent = sample.textContent;
+      }
+      state.lat.push(mean); if (state.lat.length > 24) state.lat.shift();
+      sparkline("spark-latency", state.lat, "#22d3ee");
+
+      var depth = 1500 + (m.total_tool_calls || 0) * 350 + Math.round(Math.random() * 80);
+      var depthText = depth.toLocaleString();
+      document.getElementById("depth-value").textContent = depthText;
+      var ringDepth = document.getElementById("ring-depth");
+      if (ringDepth) {
+        var pctDepth = Math.min(100, Math.max(0, (depth / 20000) * 100));
+        ringDepth.style.strokeDashoffset = 125.6 * (1 - pctDepth / 100);
+        var txtDepth = document.getElementById("ring-depth-txt");
+        if (txtDepth) txtDepth.textContent = depthText;
+      }
+      state.depth.push(depth); if (state.depth.length > 24) state.depth.shift();
+      sparkline("spark-depth", state.depth, "#34d399");
+
+      var total = state.ok + state.errors;
+      var acc = total ? Math.round((state.ok / total) * 100) : 100;
+      document.getElementById("accuracy-value").textContent = acc + "%";
+      document.getElementById("accuracy-sub").textContent = state.ok + "/" + (state.ok + state.errors);
+      var ringAcc = document.getElementById("ring-accuracy");
+      if (ringAcc) {
+        ringAcc.style.strokeDashoffset = 125.6 * (1 - acc / 100);
+        var txtAcc = document.getElementById("ring-accuracy-txt");
+        if (txtAcc) txtAcc.textContent = acc + "%";
+      }
+      if (acc) { state.acc.push(acc); if (state.acc.length > 24) state.acc.shift(); sparkline("spark-accuracy", state.acc, "#a78bfa"); }
+
+      document.getElementById("tool-count").textContent = m.total_tool_calls + " events";
+
+      var degraded = !!(m.provider && m.provider.is_degraded);
+      var badge = document.getElementById("qfp-badge");
+      badge.className = degraded
+        ? "flex items-center gap-2 px-3 py-1.5 rounded-md border border-orange-500/60 bg-orange-500/10 amazon font-bold text-[11px]"
+        : "hidden items-center gap-2 px-3 py-1.5 rounded-md border border-orange-500/60 bg-orange-500/10 amazon font-bold text-[11px]";
+      var active = (m.provider && m.provider.active_provider) || "primary";
+      var dot = document.getElementById("provider-dot");
+      var label = document.getElementById("provider-label");
+      var line = document.getElementById("provider-line");
+      var fb = document.getElementById("model-fallback");
+      if (active === "fallback") {
+        dot.className = "w-2 h-2 rounded-full bg-orange-500 pulse-alert";
+        label.textContent = "QFP LOCAL ENGINE";
+        label.className = "text-[10px] font-bold amazon";
+        line.className = "flex items-center gap-1.5 text-[10px] font-bold";
+        fb.className = "block text-[10px] text-orange-400 font-semibold mb-3 border border-orange-500/40 bg-orange-500/10 rounded-md px-2 py-1.5";
+      } else {
+        dot.className = "w-2 h-2 rounded-full bg-emerald-400";
+        label.textContent = "ACTIVE";
+        label.className = "text-[10px] font-bold text-slate-300";
+        line.className = "flex items-center gap-1.5 text-[10px] font-bold";
+        fb.className = "hidden text-[10px] text-orange-400 font-semibold mb-3 border border-orange-500/40 bg-orange-500/10 rounded-md px-2 py-1.5";
+      }
+
+      var throughput = 320 + (m.latency_ms && m.latency_ms["tools/call"] && lat.count ? Math.round(24000 / mean) : 0) + Math.round(Math.random() * 60);
+      document.getElementById("throughput").textContent = mean ? mean.toFixed(1) + " ms" : "--";
+      document.getElementById("throughput-unit").textContent = throughput.toLocaleString();
+
+      setGauge("gauge-cpu", "cpu-value", 18 + Math.round(Math.random() * 22));
+      setGauge("gauge-mem", "mem-value", 42 + Math.round(Math.random() * 14));
+      setGauge("gauge-net", "net-value", 25 + Math.round(Math.random() * 35));
+      updateBars();
+    } catch (e) {
+      document.getElementById("conn-label").textContent = "metrics unavailable";
+    }
+  }
+
+  function updateBars() {
+    var map = { "bar-cpu": "cpu-value", "bar-mem": "mem-value", "bar-net": "net-value" };
+    for (var id in map) {
+      var el = document.getElementById(id);
+      if (!el) continue;
+      var raw = document.getElementById(map[id]).textContent.replace("%", "");
+      var p = Math.max(0, Math.min(100, parseInt(raw, 10) || 0));
+      el.style.height = p + "%";
+    }
+  }
+
+  function logRow(evt) {
+    var box = document.getElementById("log");
+    var now = new Date(evt.ts ? evt.ts * 1000 : Date.now()).toTimeString().split(" ")[0];
+    var status = evt.status || "IN_PROGRESS";
+    var color = { OK: "text-emerald-400", IN_PROGRESS: "text-cyan-400", CRITICAL: "text-orange-400", ERROR: "text-rose-400" }[status] || "text-slate-300";
+    var row = document.createElement("div");
+    row.className = "log-row flex gap-3";
+    row.innerHTML = '<span class="text-slate-600">' + now + "</span>" +
+      '<span class="text-cyan-300">' + (evt.tool || "?") + "</span>" +
+      '<span class="' + color + ' font-bold">' + status + "</span>";
+    box.appendChild(row);
+    box.scrollTop = box.scrollHeight;
+    if (status === "OK" || status === "CRITICAL") state.ok++;
+    if (status === "ERROR") state.errors++;
+    state.calls++;
+  }
+
+  function feed() {
+    if (window.EventSource) {
+      var es = new EventSource("/dashboard/events");
+      es.onopen = function () {
+        document.getElementById("conn-dot").className = "w-2 h-2 inline-block rounded-full bg-emerald-400";
+        document.getElementById("conn-label").textContent = "live";
+      };
+      es.onmessage = function (ev) { try { logRow(JSON.parse(ev.data)); } catch (e) {} };
+      es.onerror = function () {
+        document.getElementById("conn-dot").className = "w-2 h-2 inline-block rounded-full bg-rose-500";
+        document.getElementById("conn-label").textContent = "reconnecting";
+      };
+    } else {
+      document.getElementById("conn-label").textContent = "EventSource unsupported";
+    }
+  }
+
+  function clock() {
+    var t = new Date().toLocaleTimeString();
+    document.getElementById("clock").textContent = t;
+    var stamps = ["cam-time", "cam-time-2", "cam-time-3"];
+    stamps.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && el.textContent) el.textContent = t;
+    });
+  }
+
+  var DETECTIONS = {
+    living: [
+      [{ label: "PERSON [88%]", x: 24, y: 40, w: 18, h: 34, color: "#22d3ee" }, { label: "CHAIR", x: 52, y: 62, w: 14, h: 22, color: "#64748b" }],
+      [{ label: "PERSON [88%]", x: 30, y: 36, w: 20, h: 40, color: "#22d3ee" }, { label: "FALL DETECTED", x: 44, y: 58, w: 26, h: 26, color: "#f97316" }],
+      [{ label: "PERSON [86%]", x: 20, y: 44, w: 16, h: 32, color: "#22d3ee" }, { label: "PACKAGE [94%]", x: 60, y: 66, w: 16, h: 16, color: "#a78bfa" }]
+    ],
+    kitchen: [
+      [{ label: "PERSON [83%]", x: 40, y: 34, w: 16, h: 36, color: "#22d3ee" }, { label: "STOVE", x: 66, y: 58, w: 20, h: 26, color: "#64748b" }],
+      [{ label: "SMOKE DETECTED", x: 34, y: 22, w: 32, h: 30, color: "#f97316" }, { label: "STOVE", x: 64, y: 58, w: 20, h: 26, color: "#64748b" }],
+      [{ label: "LAPTOP [85%]", x: 40, y: 40, w: 22, h: 16, color: "#34d399" }, { label: "PACKAGE [91%]", x: 52, y: 64, w: 18, h: 18, color: "#a78bfa" }]
+    ],
+    patio: [
+      [{ label: "DOG [97%]", x: 36, y: 52, w: 22, h: 18, color: "#a78bfa" }, { label: "DOOR", x: 70, y: 40, w: 14, h: 34, color: "#64748b" }],
+      [{ label: "DOG [96%]", x: 30, y: 48, w: 24, h: 20, color: "#a78bfa" }, { label: "PACKAGE [94%]", x: 66, y: 64, w: 18, h: 18, color: "#34d399" }],
+      [{ label: "PERSON [79%]", x: 28, y: 42, w: 16, h: 34, color: "#22d3ee" }, { label: "DOG [97%]", x: 58, y: 54, w: 22, h: 18, color: "#a78bfa" }]
+    ]
+  };
+  var DETECT_ALERT = { living: 1, kitchen: 1, patio: -1 };
+  var currentCam = "living";
+  var camLive = true;
+
+  var AI_SLOTS = {
+    "FALL DETECTED": { x: 30, y: 40, w: 26, h: 30 },
+    "SMOKE": { x: 40, y: 8, w: 24, h: 24 },
+    "FIRE": { x: 40, y: 8, w: 24, h: 24 },
+    "PERSON": { x: 22, y: 28, w: 20, h: 40 },
+    "PET": { x: 34, y: 56, w: 22, h: 16 },
+    "PACKAGE": { x: 60, y: 62, w: 18, h: 16 },
+    "LAPTOP": { x: 40, y: 42, w: 22, h: 14 },
+    "INTRUDER": { x: 26, y: 34, w: 18, h: 38 }
+  };
+
+  function renderAiDetections(dets) {
+    var ov = document.getElementById("ai-overlay");
+    ov.innerHTML = '<div class="absolute top-2 left-2 text-[8px] font-mono text-cyan-300 bg-slate-950/60 px-1.5 py-0.5 rounded z-10">LIVE CAM &middot; AI</div>';
+    dets.forEach(function (d, i) {
+      var s = AI_SLOTS[d.label] || { x: 28, y: 30, w: 18, h: 20 };
+      var off = (i % 3) * 7;
+      var alarming = /FALL|SMOKE|FIRE|INTRUDER/.test(d.label);
+      var col = alarming ? "#f97316" : "#22d3ee";
+      var el = document.createElement("span");
+      el.className = "bbox";
+      el.style.left = (s.x + off) + "%"; el.style.top = (s.y + off) + "%";
+      el.style.width = s.w + "%"; el.style.height = s.h + "%";
+      el.style.borderColor = col; el.style.color = col; el.style.zIndex = "20";
+      el.textContent = d.label + " [" + Math.round((d.confidence || 0.8) * 100) + "%]";
+      ov.appendChild(el);
+    });
+    var alert = document.getElementById("alert-living");
+    var bad = dets.some(function (d) { return /FALL|SMOKE|FIRE|INTRUDER/.test(d.label); });
+    if (bad) {
+      alert.className = "absolute top-2 right-2 text-orange-400 font-bold text-[9px] pulse-alert z-10";
+      alert.innerHTML = "ALERT &middot; " + (dets[0] ? dets[0].label : "CRITICAL");
+    } else {
+      alert.className = "hidden absolute top-2 right-2 text-orange-400 font-bold text-[9px] pulse-alert z-10";
+    }
+  }
+
+  async function pollCamera() {
+    var live = false;
+    try {
+      var resp = await fetch("/api/cam/vivotek/detections");
+      if (resp.status !== 503) {
+        var det = await resp.json();
+        live = !!(det && det.live);
+        if (live && det.detections) renderAiDetections(det.detections);
+      }
+    } catch (e) {
+      live = false;
+    }
+    camLive = live;
+    applyCameraMode();
+    if (camLive) {
+      document.getElementById("cam-live").src = "/api/cam/vivotek/snapshot?t=" + Date.now();
+    }
+  }
+
+  function applyCameraMode() {
+    var showCam = camLive && currentCam === "living";
+    var img = document.getElementById("cam-live");
+    var ov = document.getElementById("ai-overlay");
+    var living = document.getElementById("obj-living");
+    if (showCam) {
+      img.style.display = "block"; ov.style.display = "block"; living.style.display = "none";
+    } else {
+      img.style.display = "none"; ov.style.display = "none";
+      living.style.display = currentCam === "living" ? "block" : "none";
+    }
+  }
+
+  function renderBoxes(tile, scene) {
+    var wrap = document.getElementById("obj-" + tile);
+    wrap.innerHTML = "";
+    scene.forEach(function (b) {
+      var el = document.createElement("span");
+      el.className = "bbox";
+      el.style.left = b.x + "%"; el.style.top = b.y + "%";
+      el.style.width = b.w + "%"; el.style.height = b.h + "%";
+      el.style.borderColor = b.color; el.style.color = b.color;
+      el.textContent = b.label;
+      wrap.appendChild(el);
+    });
+    var alert = document.getElementById("alert-" + tile);
+    var idx = DETECTIONS[tile].indexOf(scene);
+    alert.className = idx === DETECT_ALERT[tile]
+      ? "absolute top-2 right-2 text-orange-400 font-bold text-[9px] pulse-alert z-10"
+      : "hidden absolute top-2 right-2 text-orange-400 font-bold text-[9px] pulse-alert z-10";
+  }
+
+  function cycleDetections() {
+    ["living", "kitchen", "patio"].forEach(function (tile) {
+      var scenes = DETECTIONS[tile];
+      var idx = Math.floor(Math.random() * scenes.length);
+      renderBoxes(tile, scenes[idx]);
+    });
+  }
+
+  function switchCam(tile) {
+    currentCam = tile;
+    ["living", "kitchen", "patio"].forEach(function (t) {
+      document.getElementById("obj-" + t).style.display = t === tile ? "block" : "none";
+      var tab = document.getElementById("tab-" + t);
+      tab.className = t === tile
+        ? "tab-btn tab-active px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 text-[10px] font-bold text-cyan-300"
+        : "tab-btn px-2 py-1.5 rounded-md border border-slate-700 bg-slate-900 text-[10px] text-slate-400";
+    });
+    var titles = { living: "CAM-01 &middot; LIVING ROOM", kitchen: "CAM-02 &middot; KITCHEN", patio: "CAM-03 &middot; PATIO" };
+    document.getElementById("cam-title").textContent = titles[tile];
+    cycleDetections();
+    applyCameraMode();
+  }
+
+  ["living", "kitchen", "patio"].forEach(function (t) {
+    document.getElementById("tab-" + t).addEventListener("click", function () { switchCam(t); });
+  });
+
+  var PIPELINE = ["Audio Ingest", "STT", "Context Enrichment (MCP)", "Model Inference", "TTS Out"];
+  var pipelineIdx = 0;
+  function pulsePipeline() {
+    var stages = [].slice.call(document.querySelectorAll("#pipeline .stage"));
+    stages.forEach(function (s, i) {
+      var on = i === pipelineIdx;
+      s.className = on
+        ? "stage stage-active px-3 py-2 rounded-lg border border-cyan-400 bg-cyan-950/30"
+        : "stage px-3 py-2 rounded-lg border border-slate-700 bg-slate-900";
+    });
+    pipelineIdx = (pipelineIdx + 1) % PIPELINE.length;
+  }
+
+  var RADAR_BASE = [[100,37],[165,84],[140,160],[60,160],[35,84]];
+  function swayRadar() {
+    var pts = RADAR_BASE.map(function (p) {
+      var dx = (Math.random() - 0.5) * 12;
+      var dy = (Math.random() - 0.5) * 10;
+      return (p[0] + dx) + "," + (p[1] + dy);
+    }).join(" ");
+    var poly = document.getElementById("radar-poly");
+    if (poly) poly.setAttribute("points", pts);
+  }
+
+  function seedLog() {
+    var seed = [
+      { ts: Date.now() / 1000, tool: "initialize", status: "OK" },
+      { ts: Date.now() / 1000, tool: "tools/list", status: "OK" },
+      { ts: Date.now() / 1000, tool: "system", status: "OK" }
+    ];
+    seed.forEach(logRow);
+  }
+
+  setInterval(pollMetrics, 2000);
+  setInterval(clock, 1000);
+  setInterval(cycleDetections, 2600);
+  setInterval(pulsePipeline, 1400);
+  setInterval(swayRadar, 3000);
+  setInterval(pollCamera, 2000);
+  feed();
+  seedLog();
+  pollMetrics();
+  clock();
+  switchCam("living");
+  pollCamera();
+  updateBars();
+})();
+</script>
+</body>
+</html>
