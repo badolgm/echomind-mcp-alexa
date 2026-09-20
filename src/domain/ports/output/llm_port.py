@@ -11,6 +11,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Mapping
 
+from src.domain.models.tools import MultimodalAttachment
+
 
 @dataclass(frozen=True, slots=True)
 class LLMRequest:
@@ -21,6 +23,7 @@ class LLMRequest:
     temperature: float = 0.0
     max_tokens: int = 256
     stop_sequences: tuple[str, ...] = ()
+    attachments: tuple[MultimodalAttachment, ...] = ()
     extra: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

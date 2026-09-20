@@ -1,21 +1,56 @@
 """Concrete adapter bridging the AWS Bedrock Converse API to LLMServicePort.
 
 Uses the synchronous boto3 client wrapped with asyncio.to_thread so the
-adapter stays non-blocking without depending on async AWS SDKs.
+adapter stays non-blocking without depending on async AWS SDKs. Supports
+multimodal input (images, audio, video, documents) through the Converse
+content-block API.
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Callable
 from typing import Any, Mapping
 
 import boto3
 
+from src.domain.models.intent import Modality
+from src.domain.models.tools import MultimodalAttachment
 from src.domain.ports.output.llm_port import LLMRequest, LLMResponse, LLMServicePort
 
 _DEFAULT_MODEL_ID = "amazon.nova-micro-v1:0"
 _DEFAULT_REGION = "us-east-1"
+
+_IMAGE_FORMATS = {
+    "image/jpeg": "jpeg",
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/webp": "webp",
+}
+
+_VIDEO_FORMATS = {
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+    "video/x-matroska": "mkv",
+}
+
+_AUDIO_FORMATS = {
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/flac": "flac",
+}
+
+_DOCUMENT_FORMATS = {
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "text/csv": "csv",
+    "text/plain": "txt",
+    "text/markdown": "md",
+}
 
 
 class BedrockLLMAdapter(LLMServicePort):
@@ -60,11 +95,33 @@ class BedrockLLMAdapter(LLMServicePort):
         }
         if request.stop_sequences:
             inference_config["stopSequences"] = list(request.stop_sequences)
+        content_blocks: list[dict[str, Any]] = [
+            self._attachment_to_converse_block(attachment)
+            for attachment in request.attachments
+        ]
+        content_blocks.append({"text": request.user_prompt})
         return self._client.converse(
             modelId=self._model_id,
-            messages=[{"role": "user", "content": [{"text": request.user_prompt}]}],
+            messages=[{"role": "user", "content": content_blocks}],
             system=[{"text": request.system_prompt}],
             inferenceConfig=inference_config,
+        )
+
+    def _attachment_to_converse_block(
+        self, attachment: MultimodalAttachment
+    ) -> dict[str, Any]:
+        if attachment.kind is Modality.IMAGE:
+            return _media_block("image", _IMAGE_FORMATS.get, attachment)
+        if attachment.kind is Modality.VIDEO:
+            return _media_block("video", _VIDEO_FORMATS.get, attachment)
+        if attachment.kind is Modality.AUDIO:
+            return _media_block("audio", _AUDIO_FORMATS.get, attachment)
+        if attachment.kind is Modality.DOCUMENT:
+            return _media_block("document", _DOCUMENT_FORMATS.get, attachment)
+        if attachment.kind is Modality.TEXT:
+            return {"text": attachment.data.decode("utf-8", errors="replace")}
+        raise ValueError(
+            f"modality {attachment.kind.value} is not supported by the Converse adapter"
         )
 
     def _parse_response(self, model_response: Mapping[str, Any]) -> LLMResponse:
@@ -85,3 +142,16 @@ class BedrockLLMAdapter(LLMServicePort):
                 else None
             ),
         )
+
+
+def _media_block(
+    block_type: str,
+    format_lookup: Callable[[str], str | None],
+    attachment: MultimodalAttachment,
+) -> dict[str, Any]:
+    fmt = format_lookup(attachment.mime_type)
+    if fmt is None:
+        raise ValueError(
+            f"unsupported {block_type} MIME type: {attachment.mime_type!r}"
+        )
+    return {block_type: {"format": fmt, "source": {"bytes": attachment.data}}}

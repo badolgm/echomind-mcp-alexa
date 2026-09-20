@@ -23,6 +23,7 @@ class Modality(Enum):
     AUDIO = "audio"
     IMAGE = "image"
     VIDEO = "video"
+    DOCUMENT = "document"
     HAPTIC = "haptic"
 
 

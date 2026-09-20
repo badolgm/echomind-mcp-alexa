@@ -46,17 +46,28 @@ _CLASSIFICATION_FRAGMENT = re.compile(
 )
 
 
-def _parse_classification(raw_text: str) -> tuple[str, float]:
+def extract_json_object(raw_text: str) -> dict[str, object] | None:
+    """Extract the first balanced JSON object literal found in the text."""
+    start = raw_text.find("{")
+    end = raw_text.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        payload = json.loads(raw_text[start : end + 1])
+    except (ValueError, TypeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def parse_classification(raw_text: str) -> tuple[str, float]:
     """Extract a (label, confidence) pair from model output.
 
     Prefers a complete JSON document but degrades gracefully to regex
     scanning, then to a normalized fallback label.
     """
-    start = raw_text.find("{")
-    end = raw_text.rfind("}")
-    if start != -1 and end > start:
+    payload = extract_json_object(raw_text)
+    if payload is not None:
         try:
-            payload = json.loads(raw_text[start : end + 1])
             label = str(payload["label"]).strip().lower()
             confidence = float(payload["confidence"])
             return label, confidence
@@ -69,7 +80,7 @@ def _parse_classification(raw_text: str) -> tuple[str, float]:
     return (fallback or "unclassified"), 0.5
 
 
-def _tokenize(label: str) -> Sequence[str]:
+def tokenize_label(label: str) -> Sequence[str]:
     """Split an intent label into tokens usable for MCP tool matching."""
     tokens = [token for token in re.split(r"[_\-.\s]+", label) if token]
     return tuple({label, *tokens})
@@ -135,11 +146,11 @@ class ProcessIntentUseCase:
             max_tokens=128,
         )
         raw = (await self._llm_service.generate(llm_request)).text
-        label, confidence = _parse_classification(raw)
+        label, confidence = parse_classification(raw)
         return intent.classify(label, IntentConfidence(confidence))
 
     async def _select_tool(self, intent: UserIntent) -> MCPTool | None:
-        tokens = _tokenize(intent.label or "")
+        tokens = tokenize_label(intent.label or "")
         for tool in await self._mcp_service.list_tools():
             haystack = f"{tool.name} {tool.description}".lower()
             if any(token and token in haystack for token in tokens):

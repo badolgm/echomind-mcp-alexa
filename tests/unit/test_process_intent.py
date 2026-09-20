@@ -10,7 +10,7 @@ import pytest
 from src.application.dtos.intent_dto import ProcessIntentRequest
 from src.application.use_cases.process_intent import (
     ProcessIntentUseCase,
-    _parse_classification,
+    parse_classification,
 )
 from src.domain.models.intent import IntentConfidence, Modality
 from src.domain.ports.output.llm_port import LLMRequest, LLMResponse, LLMServicePort
@@ -140,7 +140,7 @@ async def test_no_matching_tool_falls_back_to_llm_answer(alarm_tool: MCPTool) ->
 def test_parse_classification_normalizes_model_output(
     raw: str, expected_label: str
 ) -> None:
-    label, confidence = _parse_classification(raw)
+    label, confidence = parse_classification(raw)
     assert label == expected_label
     assert 0.0 <= confidence <= 1.0
 

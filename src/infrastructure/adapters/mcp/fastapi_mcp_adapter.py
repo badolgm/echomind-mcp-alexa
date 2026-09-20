@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import FastAPI, Header, Request, Response
 from fastapi.responses import StreamingResponse
 
+from src.domain.models.tools import AgentTool
 from src.domain.ports.output.mcp_port import (
     MCPContentItem,
     MCPServerPort,
@@ -37,6 +38,15 @@ SESSION_HEADER = "Mcp-Session-Id"
 DEFAULT_ENDPOINT = "/mcp"
 
 ToolHandler = Callable[[Mapping[str, Any]], Awaitable[MCPResponse]]
+
+
+def agent_tool_to_mcp_tool(agent_tool: AgentTool) -> MCPTool:
+    """Project a domain AgentTool onto the MCP transport descriptor."""
+    return MCPTool(
+        name=agent_tool.name,
+        description=agent_tool.description,
+        input_schema=agent_tool.input_schema,
+    )
 
 
 def _json_rpc_response(
@@ -67,13 +77,25 @@ class _McpSession:
 
 
 class InMemoryMCPServer(MCPServerPort):
-    """MCPServerPort implementation backed by an in-memory tool registry."""
+    """MCPServerPort implementation backed by an in-memory tool registry.
+
+    The registry maps JSON-RPC ``tools/call`` names directly to async tool
+    handlers (resolvers), which may close over application use cases.
+    """
 
     def __init__(self) -> None:
         self._registry: dict[str, tuple[MCPTool, ToolHandler]] = {}
 
     def register_tool(self, tool: MCPTool, handler: ToolHandler) -> None:
-        self._registry[tool.name] = (tool, handler)
+        self._register(tool.name, tool, handler)
+
+    def register_agent_tool(self, agent_tool: AgentTool, handler: ToolHandler) -> None:
+        self._register(agent_tool.name, agent_tool_to_mcp_tool(agent_tool), handler)
+
+    def _register(self, name: str, tool: MCPTool, handler: ToolHandler) -> None:
+        if name in self._registry:
+            raise ValueError(f"tool already registered: {name}")
+        self._registry[name] = (tool, handler)
 
     async def list_tools(self) -> tuple[MCPTool, ...]:
         return tuple(tool for tool, _handler in self._registry.values())
