@@ -194,7 +194,7 @@ In-process round trips, Streamable HTTP over ASGI (development laptop):
 
 ## 10. Testing & quality gates
 
-- 74 tests across `tests/unit` (domain, use cases, adapters, fallback, ambient) and
+- 79 tests across `tests/unit` (domain, use cases, adapters, fallback, ambient, dashboard) and
   `tests/integration` (SSE session lifecycle, composition smoke, telemetry, skill manifest).
 - All ports are mocked: suite runs offline.
 - Mandatory before completing any phase:
@@ -235,3 +235,37 @@ code changes.
 - [x] Phase 3 — Persistent sessions, SSE, simulator, production entry.
 - [x] Phase 4 — Ambient awareness, Quota Fallback Protocol, master docs.
 - [x] Phase 5 — Alexa+ skill manifest, observability, Docker packaging, demo runner.
+- [x] Phase 6 — EchoMind MCP Control Center: interactive web dashboard (SSE tools log, live metrics, QFP badge).
+- [x] Phase 7 — Live Vivotek IP camera: real-time snapshot feed, graceful fallback frame, AI detection overlay.
+
+## 13. Web Control Center
+
+`/dashboard` (or `/`) serves the EchoMind MCP Control Center: a dark slate UI with neon cyan and
+Amazon orange accents, pure HTML + Tailwind (CDN) + vanilla JS. It polls `/metrics` every 2 s and
+consumes the `/dashboard/events` SSE stream (fed by the `EventHub` broadcast from
+`FastAPIMCPServer._call_tool`) for the live tools log. The **QUOTA FALLBACK MODE ACTIVE (QFP)**
+badge switches to orange warning state when `/metrics.provider.is_degraded` becomes true, which the
+resilience layer sets on the first Bedrock quota/credential failure. Camera feeds, detection
+bounding boxes (PERSON / DOG / PACKAGE / FALL DETECTED / SMOKE DETECTED), the MCP pipeline stepper
+and CPU/MEM/NET gauges are simulated client-side to showcase the multimodal analytics concept.
+
+## 14. Live Vivotek camera integration (Phase 7)
+
+`VivotekCameraAdapter` (`src/infrastructure/adapters/iot/vivotek_adapter.py`) is an async `httpx`
+client for the FD8367 snapshot endpoint (`http://192.168.40.10/cgi-bin/viewer/video.jpg`, override
+with `ECHOMIND_VIVOTEK_IP`). It caches the newest frame for `cache_ttl` seconds; unreachable,
+timed-out or invalid responses produce a deterministic clean PNG test frame, so the pipeline stays
+operational 24/7. Routes (mounted in `main.compose`):
+
+- `GET /api/cam/vivotek/snapshot` — raw JPEG/PNG with `X-Source`, `X-Captured-At` and `no-store`;
+  `?format=base64` returns JSON.
+- `GET /api/cam/vivotek/detections` — JSON `{source, live, detections}` fed by the ambient resolver.
+
+`build_ambient_resolver(llm_service, camera=None)` auto-attaches the latest **live** frame to the
+Bedrock Converse request when no explicit media attachment is given, then `extract_detections`
+derives AI-predicted labels (FALL DETECTED / SMOKE / FIRE / PERSON / PET / PACKAGE / LAPTOP /
+INTRUDER) from the report text and records them on the camera adapter. The dashboard's CAM-01
+(LIVING ROOM) tab refreshes the live image every ~2 s, overlays the predicted bounding boxes and
+raises an orange ALERT for critical labels; when the camera fails it keeps rendering the simulated
+scenes. The local rule engine (QFP) and `extract_detections` match safety keywords as whole words,
+so tokens embedded in labels (e.g. `cat` inside `location`) never trigger false detections.

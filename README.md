@@ -20,6 +20,9 @@ the home conversation:
 - **Pet wellbeing** — unattended or distressed pets are flagged and followed up.
 - **Anomaly & security** — smoke/fire indicators, intrusions and unknown persons.
 - **Multimodal grounding** — images, video, audio and PDF documents are fed straight to the model.
+- **Control Center** — an interactive dark-mode web dashboard (`/dashboard`) with live latency
+  sparklines, simulated camera feeds with detection boxes, the MCP pipeline viewer, a streaming
+  tools log (SSE) and a live **Quota Fallback Mode** badge.
 
 Every snapshot is graded by a **deterministic safety gate** and by a reasoning model, so critical
 signals are never dropped — even when the cloud is not reachable.
@@ -136,6 +139,12 @@ black --check src tests --line-length 88
 python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
 ```
 
+Open the **EchoMind MCP Control Center** at [http://localhost:8000](http://localhost:8000/) — the
+interactive dark-mode dashboard (agent metrics with sparklines, live **Vivotek IP camera** feed with
+AI-predicted detection boxes, simulated multimodal cameras, MCP pipeline viewer, live tools log via
+SSE and Bedrock/QFP utilization gauges). If the camera is unreachable the server serves a clean
+synthetic frame and the dashboard falls back to the simulated view.
+
 > AWS credentials come from the standard chain (`~/.aws/credentials`, env vars, IAM role).
 > **Never commit credentials.** Without any credentials, the Quota Fallback Protocol keeps the
 > server fully operational using the local rule engine.
@@ -213,6 +222,7 @@ the full Quota Fallback Protocol if they are absent.
 | `ECHOMIND_SESSION_IDLE_TIMEOUT` | `300` | MCP session idle expiry (seconds) |
 | `ECHOMIND_SSE_KEEPALIVE_SECONDS` | `15` | SSE heartbeat interval |
 | `ECHOMIND_HOST` / `ECHOMIND_PORT` | `0.0.0.0` / `8000` | uvicorn bind |
+| `ECHOMIND_VIVOTEK_IP` | `192.168.40.10` | Vivotek FD8367 camera host for live ambient frames |
 
 ---
 
@@ -228,7 +238,7 @@ In-process round trips over the Streamable HTTP transport (this laptop, ASGI):
 ## Quality gates
 
 ```powershell
-pytest -q          # 74 tests
+pytest -q          # 79 tests
 flake8 src tests   # zero violations
 black --check src tests --line-length 88
 ```
@@ -242,6 +252,8 @@ black --check src tests --line-length 88
 - [x] **Phase 3** — Persistent sessions, SSE streaming, simulator, production entry point.
 - [x] **Phase 4** — Active Ambient Awareness tool, Quota Fallback Protocol, master docs.
 - [x] **Phase 5** — Alexa+ skill manifest, observability (`/metrics`), Docker packaging, demo runner.
+- [x] **Phase 6** — EchoMind MCP Control Center: interactive web dashboard (SSE tools log, live metrics, QFP badge).
+- [x] **Phase 7** — Live Vivotek IP camera integration: real-time snapshot feed, graceful fallback frame, AI detection overlay on the dashboard.
 
 ---
 
