@@ -1,0 +1,56 @@
+# ============================================================
+# Echosystem - Automated Live Test Generation
+# ============================================================
+
+# Local scratch workspace (scripts, notes, backups)
+.local/
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+xmlcov/
+coverage.json
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# AWS credentials and configuration
+.aws/
+credentials
+~/.aws/credentials
+.env
+.env.*
+*.pem
+*.p12
+*.key
+secrets/
+aws_config.json
+
+# IDE / editor artifacts
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
