@@ -152,9 +152,22 @@ $env:CAMERA="simulation"
 
 ## 7. Inventario de respaldo (checklist)
 
-- [ ] Punto de restauración creado (commit de respaldo o ZIP del working tree).
-- [ ] `pytest` = 189 passed verificado tras el respaldo.
-- [ ] `flake8` / `black` limpios.
-- [ ] Arquitectura y dependencias documentadas (este archivo).
-- [ ] Procedimiento de recuperación probado.
-- [ ] Validación física Android (pendiente de hardware).
+- [x] Punto de restauración creado: rama `checkpoint/day1-mobile-memory`, commit `0789ce4`, + ZIP del working tree.
+- [x] `pytest` = 189 passed verificado tras el respaldo.
+- [x] `flake8` / `black` limpios.
+- [x] Arquitectura y dependencias documentadas (este archivo).
+- [x] Procedimiento de recuperación documentado.
+- [ ] Validación física Android — **diferida** (no bloquea; fuente física actual = webcam/Vivotek).
+
+---
+
+## 8. Punto de recuperación (resultado)
+
+| Respaldo | Referencia |
+|---|---|
+| Rama git local | `checkpoint/day1-mobile-memory` |
+| Commit | `0789ce4 feat: add historical memory (V1-V3) and Android phone camera source` |
+| ZIP | `C:\Users\BagmDev\AppData\Local\Temp\opencode\echomind_checkpoint_day1_20261010_031728.zip` |
+| `main` | intacta en `92029c3` (sin push, sin merge) |
+
+Restaurar: `git checkout checkpoint/day1-mobile-memory` (o descomprimir el ZIP).

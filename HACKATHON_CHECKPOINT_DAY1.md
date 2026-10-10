@@ -130,6 +130,13 @@ Ambas fuentes:
 
 ## 8. Acciones de recuperación
 
-Si el working tree se pierde **antes** del respaldo: solo los 11 commits (`92029c3…b9b0708`) son recuperables; memoria y Android Camera se pierden.
+**Punto de recuperación creado (FASE 4 ejecutada):**
 
-Recuperación planificada en FASE 4 (`CHECKPOINT_DAY1_SUMMARY.md`) mediante punto de restauración (commit de respaldo y/o ZIP del working tree).
+| Respaldo | Referencia |
+|---|---|
+| Rama git local | `checkpoint/day1-mobile-memory` |
+| Commit | `0789ce4 feat: add historical memory (V1-V3) and Android phone camera source` (28 archivos, +3520/−139) |
+| ZIP del working tree | `C:\Users\BagmDev\AppData\Local\Temp\opencode\echomind_checkpoint_day1_20261010_031728.zip` (442.6 KB) |
+
+- `main` permanece intacta en `92029c3`. **Sin push, sin merge.**
+- Tras el respaldo: working tree limpio, `pytest` = 189 passed, flake8/black limpios.
