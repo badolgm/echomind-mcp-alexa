@@ -12,12 +12,15 @@ from httpx import AsyncClient
 from src.domain.ports.output.llm_port import LLMRequest, LLMResponse, LLMServicePort
 from src.infrastructure.adapters.mcp.tool_resolvers import (
     build_ambient_resolver,
+    combine_vision_with_baseline,
     extract_detections,
 )
 from src.infrastructure.adapters.iot.vivotek_adapter import (
     VivotekCameraAdapter,
     mount_camera_routes,
 )
+from src.infrastructure.config.event_hub import EventHub
+from src.infrastructure.services.sensor_bus import SensorReading
 
 _LIVE_BYTES = b"\xff\xd8\xff\xe0live-jpeg-frame"
 _LIVE_CONTENT_TYPE = "image/jpeg"
@@ -59,6 +62,48 @@ def test_extract_detections_labels_fall_and_person() -> None:
     labels = {item["label"] for item in detections}
     assert "FALL DETECTED" in labels
     assert "PERSON" in labels
+
+
+def test_extract_detections_maps_canonical_awsvision_taxonomy() -> None:
+    elderly = extract_detections("the elderly grandpa needs help in the living room")
+    assert "PERSON_ELDERLY" in {item["label"] for item in elderly}
+    assert "PERSON" not in {item["label"] for item in elderly}
+    assert "GATE_OPEN" in {
+        item["label"] for item in extract_detections("the gate is open")
+    }
+    assert "DOOR_OPEN" in {
+        item["label"] for item in extract_detections("la puerta está abierta")
+    }
+
+
+def test_combine_vision_never_crosses_gate_and_door() -> None:
+    def reading(*, gate: bool, door: bool) -> SensorReading:
+        return SensorReading(
+            timestamp=1.0,
+            temperature_c=22.4,
+            smoke_density=0.02,
+            gate_open=gate,
+            door_open=door,
+            pet_proximity=0.8 if gate else 0.1,
+            pet_moving=True,
+        )
+
+    escape = combine_vision_with_baseline(
+        extract_detections("the gate is open and the pet is near the exit"),
+        reading(gate=True, door=False),
+    )
+    escape_labels = {item["label"] for item in escape}
+    assert "GATE_OPEN" in escape_labels
+    assert "DOOR_OPEN" not in escape_labels
+    assert "PET_ESCAPING" in escape_labels
+
+    crossed = combine_vision_with_baseline(
+        extract_detections("the door is open and the gate is open"),
+        reading(gate=False, door=True),
+    )
+    crossed_labels = {item["label"] for item in crossed}
+    assert "DOOR_OPEN" in crossed_labels
+    assert "GATE_OPEN" not in crossed_labels
 
 
 @pytest.mark.asyncio
@@ -193,3 +238,27 @@ async def test_detections_route_returns_503_without_camera() -> None:
     ) as client:
         response = await client.get("/api/cam/vivotek/detections")
     assert response.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_ambient_resolver_publishes_model_analysis_to_event_hub() -> None:
+    narrative = (
+        "The elderly person is on the floor in the living room, gate is open, "
+        "and the pet is moving toward the exit."
+    )
+    hub = EventHub()
+    queue = hub.subscribe()
+    resolver = build_ambient_resolver(_FakeLLM(text=narrative), event_hub=hub)
+    response = await resolver(
+        {"observation": "alarm in the patio", "location": "patio"}
+    )
+    assert response.is_error is False
+    assert not queue.empty()
+    event = queue.get_nowait()
+    assert event["kind"] == "camera_alert"
+    assert event["tool"] == "analyze_ambient_stream"
+    assert isinstance(event["model_analysis"], str)
+    assert event["model_analysis"] == narrative
+    assert isinstance(event["safety_gate_signals"], list)
+    assert isinstance(event["safety_gate_recommendation"], str)
+    hub.unsubscribe(queue)

@@ -185,9 +185,110 @@ ANALYZE_AMBIENT_STREAM = AgentTool(
     ),
 )
 
+MEMORY_LAST_SEEN = AgentTool(
+    name="memory_last_seen",
+    description=(
+        "Answer historical questions like 'when was the gate last seen open?' "
+        "from local vectorial memory only, never using an LLM."
+    ),
+    category=ToolCategory.KNOWLEDGE,
+    input_schema=_schema(
+        required=["label"],
+        properties={
+            "label": {
+                "type": "string",
+                "description": (
+                    "Canonical label, e.g. PERSON, PERSON_ELDERLY, PET, "
+                    "GATE_OPEN, DOOR_OPEN."
+                ),
+            },
+            "location": {
+                "type": "string",
+                "description": "Optional physical zone filter.",
+            },
+        },
+    ),
+)
+
+MEMORY_SEARCH = AgentTool(
+    name="memory_search",
+    description=(
+        "Search local vectorial memory for past observations matching a "
+        "natural-language query. Pure structured retrieval, no LLM involved."
+    ),
+    category=ToolCategory.KNOWLEDGE,
+    input_schema=_schema(
+        required=["query"],
+        properties={
+            "query": {
+                "type": "string",
+                "description": "Natural-language or label-based query.",
+            },
+            "limit": {
+                "type": "number",
+                "description": "Maximum results to return (default 5).",
+            },
+            "min_score": {
+                "type": "number",
+                "description": "Minimum cosine score threshold (default 0.0).",
+            },
+            "location": {
+                "type": "string",
+                "description": "Optional physical zone filter.",
+            },
+        },
+    ),
+)
+
+MEMORY_SUMMARY = AgentTool(
+    name="memory_summary",
+    description=(
+        "Produce a short recap in Spanish of what home observations were "
+        "persisted over the recent period, backed exclusively by local memory."
+    ),
+    category=ToolCategory.KNOWLEDGE,
+    input_schema=_schema(
+        required=[],
+        properties={
+            "hours": {
+                "type": "number",
+                "description": "Lookback window in hours (default 24).",
+            },
+            "location": {
+                "type": "string",
+                "description": "Optional physical zone filter.",
+            },
+        },
+    ),
+)
+
+MEMORY_CONVERSE = AgentTool(
+    name="memory_converse",
+    description=(
+        "Conversational memory endpoint: interpret a natural-language Spanish "
+        "question about the home's history and answer it from local memory "
+        "(last seen, search, summary, top/high/critical events, or current "
+        "state plus historical context). Deterministic routing, no LLM."
+    ),
+    category=ToolCategory.KNOWLEDGE,
+    input_schema=_schema(
+        required=["query"],
+        properties={
+            "query": {
+                "type": "string",
+                "description": "Natural-language question in Spanish.",
+            }
+        },
+    ),
+)
+
 AGENTIC_TOOL_CATALOG: tuple[AgentTool, ...] = (
     ANALYZE_IMAGE_CONTEXT,
     SUMMARIZE_DOCUMENT,
     SCHEDULE_REMINDER,
     ANALYZE_AMBIENT_STREAM,
+    MEMORY_LAST_SEEN,
+    MEMORY_SEARCH,
+    MEMORY_SUMMARY,
+    MEMORY_CONVERSE,
 )

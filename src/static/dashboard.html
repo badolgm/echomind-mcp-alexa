@@ -182,6 +182,7 @@
             <label for="cam-select" class="block text-[10px] uppercase tracking-widest text-slate-500 mb-1.5">Camera Selector</label>
             <select id="cam-select" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-[11px] font-mono text-cyan-300 focus:outline-none focus:border-cyan-400">
               <option value="real">CAM-01: Vivotek FD8367 (Hardware Real - 192.168.40.10)</option>
+              <option value="phone">CAM-P: Android Phone (IP Webcam - Real)</option>
               <option value="living">CAM-02: Living Room (Simulación Agéntica)</option>
               <option value="kitchen">CAM-03: Kitchen (Simulación Agéntica)</option>
               <option value="patio">CAM-04: Patio / Outdoor (Simulación Agéntica)</option>
@@ -210,6 +211,10 @@
                 <div class="text-[8px] text-slate-500 uppercase">Motion</div>
                 <div id="cam-motion" class="text-[10px] font-bold text-cyan-300">--</div>
               </div>
+            </div>
+            <div id="watch-analysis" class="mt-2 hidden rounded border border-slate-800 bg-slate-950/60 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase mb-1">Model Analysis (Razonamiento)</div>
+              <div id="watch-analysis-body" class="text-[10px] text-slate-300 font-mono whitespace-pre-wrap break-words max-h-24 overflow-y-auto"></div>
             </div>
           </div>
 
@@ -595,6 +600,15 @@
       : "text-[10px] font-bold text-slate-400";
     document.getElementById("cam-motion").textContent =
       (st.motion_score != null ? Math.round(st.motion_score * 100) + "%" : "--");
+    var analysisPanel = document.getElementById("watch-analysis");
+    var analysisBody = document.getElementById("watch-analysis-body");
+    var analysis = (st.model_analysis || "").trim();
+    if (analysis) {
+      analysisBody.textContent = analysis;
+      analysisPanel.classList.remove("hidden");
+    } else {
+      analysisPanel.classList.add("hidden");
+    }
   }
 
   var voiceLastText = "";
@@ -619,17 +633,18 @@
   }
 
   function handleCameraAlert(msg) {
-    if (msg.detections && msg.detections.length && currentCam === "real") {
+    if (msg.detections && msg.detections.length && (currentCam === "real" || currentCam === "phone")) {
       renderAiDetections(msg.detections);
     }
+    var analysisPanel = document.getElementById("watch-analysis");
+    var analysisBody = document.getElementById("watch-analysis-body");
+    var analysis = (msg.model_analysis || "").trim();
+    if (analysis) {
+      analysisBody.textContent = analysis;
+      analysisPanel.classList.remove("hidden");
+    }
     if (msg.risk !== "HIGH" && msg.risk !== "CRITICAL") return;
-    if (msg.announcement) { speakAlexa(msg.announcement); return; }
-    var parts = [msg.risk === "CRITICAL" ? "Alerta crítica" : "Atención"];
-    if (msg.location) parts.push("en " + msg.location + ".");
-    var labels = (msg.detections || [])
-      .map(function (d) { return ALERT_SPANISH[d.label] || d.label; });
-    parts.push(labels.length ? "Detecciones: " + labels.join(", ") + "." : "Movimiento detectado.");
-    speakAlexa(parts.join(" "));
+    speakAlexa(msg.announcement || "Movimiento detectado en el acceso");
   }
 
   function clock() {
@@ -662,6 +677,11 @@
   var DETECT_ALERT = { living: 1, kitchen: 1, patio: -1 };
   var currentCam = "living";
   var camLive = true;
+  var camStatus = "online";
+
+  function camApiPath() {
+    return currentCam === "phone" ? "/api/cam/phone" : "/api/cam/vivotek";
+  }
 
   var AI_SLOTS = {
     "FALL DETECTED": { x: 30, y: 40, w: 26, h: 30 },
@@ -708,43 +728,65 @@
 
   async function pollCamera() {
     var live = false;
+    var status = camStatus;
+    var base = camApiPath();
     try {
-      var resp = await fetch("/api/cam/vivotek/detections");
+      var resp = await fetch(base + "/detections");
       if (resp.status !== 503) {
         var det = await resp.json();
         live = !!(det && det.live);
+        status = live ? "online" : "sim";
         if (live && det.detections) renderAiDetections(det.detections);
+      } else {
+        status = "offline";
       }
     } catch (e) {
       live = false;
+      status = "offline";
     }
     camLive = live;
+    camStatus = status;
     applyCameraMode();
     try {
-      var stateResp = await fetch("/api/cam/vivotek/state");
+      var stateResp = await fetch(base + "/state");
       if (stateResp.status === 200) renderWatchState(await stateResp.json());
     } catch (e) {}
   }
 
   function refreshLiveSnapshot() {
-    if (currentCam !== "real" || !camLive) return;
-    document.getElementById("cam-live").src = "/api/cam/vivotek/snapshot?t=" + Date.now();
+    if (currentCam !== "real" && currentCam !== "phone") return;
+    if (!camLive) return;
+    document.getElementById("cam-live").src = camApiPath() + "/snapshot?t=" + Date.now();
   }
 
   function applyCameraMode() {
     var img = document.getElementById("cam-live");
     var ov = document.getElementById("ai-overlay");
-    var active = currentCam === "real" && camLive ? "real" : currentCam;
-    var showLive = active === "real";
+    var isLiveSource = currentCam === "real" || currentCam === "phone";
+    var active = currentCam;
+    var showLive = isLiveSource && camLive;
     img.style.display = showLive ? "block" : "none";
     ov.style.display = showLive ? "block" : "none";
     ["living", "kitchen", "patio"].forEach(function (t) {
       document.getElementById("obj-" + t).style.display = active === t ? "block" : "none";
     });
     var src = document.getElementById("cam-source");
-    if (currentCam === "real") {
+    var liveCls = "text-[9px] font-mono font-bold text-cyan-300 tracking-widest";
+    var warnCls = "text-[9px] font-mono font-bold text-orange-400 tracking-widest";
+    if (currentCam === "phone") {
+      if (camLive) {
+        src.textContent = "PHONE LIVE";
+        src.className = liveCls;
+      } else if (camStatus === "offline") {
+        src.textContent = "PHONE OFFLINE";
+        src.className = warnCls;
+      } else {
+        src.textContent = "PHONE SIM";
+        src.className = warnCls;
+      }
+    } else if (currentCam === "real") {
       src.textContent = camLive ? "LIVE HARDWARE" : "SIM FALLBACK";
-      src.className = camLive ? "text-[9px] font-mono font-bold text-cyan-300 tracking-widest" : "text-[9px] font-mono font-bold text-orange-400 tracking-widest";
+      src.className = camLive ? liveCls : warnCls;
     } else {
       src.textContent = "AGENTIC SIMULATION";
       src.className = "text-[9px] font-mono font-bold text-slate-400 tracking-widest";
@@ -782,6 +824,7 @@
     currentCam = cam;
     var titles = {
       real: "CAM-01 &middot; VIVOTEK FD8367",
+      phone: "CAM-P &middot; ANDROID IP WEBCAM",
       living: "CAM-02 &middot; LIVING ROOM",
       kitchen: "CAM-03 &middot; KITCHEN",
       patio: "CAM-04 &middot; PATIO"
@@ -840,7 +883,7 @@
   setInterval(pulsePipeline, 1400);
   setInterval(swayRadar, 3000);
   setInterval(pollCamera, 2000);
-  setInterval(refreshLiveSnapshot, 1500);
+  setInterval(refreshLiveSnapshot, 250);
   feed();
   seedLog();
   pollMetrics();

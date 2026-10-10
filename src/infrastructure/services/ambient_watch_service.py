@@ -24,7 +24,7 @@ from src.infrastructure.services.sensor_bus import SensorReading
 if TYPE_CHECKING:
     from src.infrastructure.adapters.iot.vivotek_adapter import CameraFrameSource
 
-MOTION_THRESHOLD = 0.12
+MOTION_THRESHOLD = 0.10
 _WATCH_ALERT_LEVELS = ("HIGH", "CRITICAL")
 _ALERT_TRIGGERS = frozenset({"GATE_OPEN", "PET_ESCAPING", "MOTION"})
 
@@ -146,6 +146,7 @@ def predict_ambient_state(
 
     if motion_score >= MOTION_THRESHOLD:
         detections["MOTION"] = round(min(0.4 + motion_score, 0.85), 2)
+        escalate("HIGH")
 
     announcement = _announcement(risk, detections)
     recommendation = _RECOMMENDATIONS_ES[risk]
@@ -184,7 +185,7 @@ class AmbientWatchService:
         camera: CameraFrameSource,
         sensor_bus: Any,
         event_hub: EventHub,
-        interval: float = 3.0,
+        interval: float = 0.5,
         motion_threshold: float = MOTION_THRESHOLD,
     ) -> None:
         self._camera = camera
@@ -194,7 +195,6 @@ class AmbientWatchService:
         self._motion_threshold = motion_threshold
         self._prev_payload = b""
         self._prev_reading: SensorReading | None = None
-        self._prev_fingerprint: tuple[str, tuple[str, ...]] | None = None
         self._stop = False
         self._last_state: dict[str, Any] = {
             "risk": "LOW",
@@ -222,6 +222,7 @@ class AmbientWatchService:
 
         detections = [dict(item) for item in prediction.detections]
         self._camera.record_detections(detections, frame.source)
+        model_analysis_text = f"{prediction.announcement}\n{prediction.recommendation}"
         self._last_state = {
             "risk": prediction.risk_level,
             "signals": list(prediction.signals),
@@ -235,31 +236,31 @@ class AmbientWatchService:
             "source": frame.source,
             "announcement": prediction.announcement,
             "recommendation": prediction.recommendation,
+            "model_analysis": model_analysis_text,
+            "safety_gate_signals": list(prediction.signals),
+            "safety_gate_recommendation": prediction.recommendation,
             "ts": now,
         }
 
         triggered = any(item["label"] in _ALERT_TRIGGERS for item in detections)
         if prediction.risk_level in _WATCH_ALERT_LEVELS and triggered:
-            fingerprint = (
-                prediction.risk_level,
-                tuple(sorted(item["label"] for item in detections)),
+            self._hub.publish(
+                {
+                    "kind": "camera_alert",
+                    "tool": "ambient_watchdog",
+                    "status": prediction.risk_level,
+                    "risk": prediction.risk_level,
+                    "location": "camera",
+                    "source": frame.source,
+                    "detections": detections,
+                    "motion_score": round(motion, 4),
+                    "announcement": prediction.announcement,
+                    "model_analysis": model_analysis_text,
+                    "safety_gate_signals": list(prediction.signals),
+                    "safety_gate_recommendation": prediction.recommendation,
+                    "ts": now,
+                }
             )
-            if fingerprint != self._prev_fingerprint:
-                self._prev_fingerprint = fingerprint
-                self._hub.publish(
-                    {
-                        "kind": "camera_alert",
-                        "tool": "ambient_watchdog",
-                        "status": prediction.risk_level,
-                        "risk": prediction.risk_level,
-                        "location": "camera",
-                        "source": frame.source,
-                        "detections": detections,
-                        "motion_score": round(motion, 4),
-                        "announcement": prediction.announcement,
-                        "ts": now,
-                    }
-                )
         return prediction
 
     async def run(self) -> None:
