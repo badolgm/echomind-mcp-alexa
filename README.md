@@ -1,33 +1,46 @@
-# Echosystem — Active Ambient Awareness for Alexa+ (MCP × AWS Bedrock)
+# EchoMind — Cognitive Memory Agent for Alexa+ (MCP × AWS Bedrock)
 
-**Echosystem** is a multimodal, agentic ecosystem purpose-built for **Alexa+**. It bridges the
-**Model Context Protocol (MCP)** — over the HTTP **Streamable** transport — with **Amazon
-Bedrock** foundation models, giving Alexa+ skills an extensible, tool-using reasoning core that
-**cares proactively** about the people and pets in the room.
+**EchoMind** is a multimodal, agentic **cognitive memory agent** purpose-built for **Alexa+**. It
+bridges the **Model Context Protocol (MCP)** — over the HTTP **Streamable** transport — with
+**Amazon Bedrock** foundation models, giving Alexa+ skills an extensible, tool-using reasoning core
+that **cares proactively** about the people and pets in the room.
 
 Built for the **Amazon Hackathon (Build, Ship, Shape 2026)** under strict **Hexagonal
 Architecture (Ports & Adapters)** and **Domain-Driven Design (DDD)**: a pure domain core, decoupled
 ports, swappable adapters, and 100% test coverage that runs offline.
 
+> **Official narrative:** `Alexa+ → EchoMind (cognitive agent) → Memory → Context → Conversation →
+> Action`. The camera, the Vivotek and Android are **NOT the product** — they are sensors/devices in
+> Alexa's ecosystem.
+
+> **Vision (official).** EchoMind **is not a camera, not a dashboard, not a CCTV platform**. EchoMind
+> **is Alexa+** with memory: it **observes → remembers → understands → converses → responds**. The
+> protagonist is always **Alexa**; the camera is one of her senses and the dashboard is the
+> operational/demo console. See [`PROJECT_VISION_ALIGNMENT.md`](PROJECT_VISION_ALIGNMENT.md).
+
 ---
 
-## The disruptive value: Active Ambient Awareness
+## What EchoMind gives Alexa+: memory over the home
 
-Instead of waiting for a voice command, Echosystem pushes **proactive safety intelligence** into
-the home conversation:
+EchoMind turns Alexa+ from a responder into an agent that **observes, remembers, understands,
+converses and responds**. Instead of waiting for a voice command, Alexa+ gains **proactive memory
+of the home**:
 
+- **An agentic memory** — every observation becomes a vector memory; ask Alexa what she saw and
+  when, in English or Spanish, with no LLM or cloud required.
 - **Elder care** — falls, immobility and "person on the floor" detection with CRITICAL severity.
 - **Pet wellbeing** — unattended or distressed pets are flagged and followed up.
 - **Anomaly & security** — smoke/fire indicators, intrusions and unknown persons.
 - **Multimodal grounding** — images, video, audio and PDF documents are fed straight to the model.
-- **Control Center** — an interactive dark-mode web dashboard (`/dashboard`) with live latency
-  sparklines, the **Dynamic Camera Viewer** (a physical Vivotek FD8367 feed plus simulated
-  scenes with detection boxes), the MCP pipeline viewer, a streaming tools log (SSE), a live
-  **Quota Fallback Mode** badge and an **autonomous AI watchdog** that predicts events (gate
-  open, pet escaping, smoke, rising temperature, motion) and **announces them aloud in Spanish**.
+- **A vision sensor (input)** — a camera (Vivotek / Android) is just **one of Alexa's senses**; it
+  feeds observations into memory. It is not the product.
+- **An operational console** — the dark-mode dashboard (`/dashboard`) is the demo/ops surface that
+  visualises Alexa's memory and senses (live metrics, pipeline viewer, SSE tools log, AI watchdog
+  readout). It is not the product either.
 
-Every snapshot is graded by a **deterministic safety gate** and by a reasoning model, so critical
-signals are never dropped — even when the cloud is not reachable.
+Every observation is graded by a **deterministic safety gate** and by a reasoning model, so critical
+signals are never dropped — even when the cloud is not reachable. And because memory is local,
+**Alexa keeps remembering and answering even if the camera or the cloud is gone**.
 
 ## The resilience promise: 24/7 via the Quota Fallback Protocol
 
@@ -160,12 +173,15 @@ AI-predicted detection boxes, simulated multimodal cameras, MCP pipeline viewer,
 SSE and Bedrock/QFP utilization gauges). If the camera is unreachable the server serves a clean
 synthetic frame and the dashboard falls back to the simulated view.
 
-### Dashboard — EchoMind MCP Control Center (local)
+### Dashboard — EchoMind MCP Control Center (operational/demo console)
+
+> **Not the product.** This console visualises **Alexa's memory and senses** for demos and ops.
+> The protagonist is **Alexa+**; the camera is one of her vision inputs (`PROJECT_VISION_ALIGNMENT.md`).
 
 After booting the server, open [http://localhost:8000/dashboard](http://localhost:8000/dashboard).
 It subscribes to the SSE stream at `/dashboard/events` for the live tools log and polls `/metrics`
 every 2 s for the utilization gauges. The **Dynamic Camera Viewer** (`cam-select`) offers 4
-sources:
+sources (vision sensors):
 
 - **CAM-01 · Vivotek FD8367** — the physical camera at `192.168.40.10` (`ECHOMIND_VIVOTEK_IP`)
   exposed as a live feed.

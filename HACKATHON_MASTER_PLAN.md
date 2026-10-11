@@ -4,6 +4,23 @@
 > Auditoría verificada contra el working tree en fecha: 10-oct-2026.
 > Sin código nuevo, sin commits, sin Docker en este sprint.
 
+> ### ⚠️ Alineación posterior (leer antes)
+> Este documento es una **auditoría histórica (10-oct-2026)** y ha quedado **superado** por
+> [`AI_BOOT_MASTER.md`](AI_BOOT_MASTER.md) (estado validado, `093a8ad`, 203 tests) y
+> [`PROJECT_VISION_ALIGNMENT.md`](PROJECT_VISION_ALIGNMENT.md) (visión oficial).
+>
+> **Correcciones de visión sobre este texto:**
+> - **Narrativa oficial:** `Alexa+ → EchoMind (agente cognitivo) → Memoria → Contexto →
+>   Conversación → Acción`. **La cámara, la Vivotek y Android NO son el producto**: son sensores o
+>   dispositivos del ecosistema de Alexa.
+> - La **protagonista es Alexa**, no la cámara. EchoMind es Alexa+ con memoria, no un sistema de
+>   cámaras ni un dashboard.
+> - El **riesgo #1 ya no es la cámara**: la cámara es un **sentido**. Aunque no haya cámara, la
+>   **memoria + conversación** siguen siendo demostrables (memoria sembrada + QFP). Ver
+>   `PROJECT_VISION_ALIGNMENT.md` §5 y §6.
+> - Los pendientes de "commit/versionado" y "modo demo sembrado" están **resueltos** en `093a8ad`
+>   (`DemoSeedService`, `/api/demo/seed`, 203 tests).
+
 ---
 
 ## FASE 1 — AUDITORÍA REAL
@@ -55,10 +72,10 @@
 
 ### 1.5 Riesgos técnicos (honestos)
 
-1. **La cámara es el punto único de fallo de la demo.** Si la Vivotek no está en el venue, `get_frame()` devuelve el frame de fallback determinista → el delta de movimiento es **cero**, y la demo de "visión" muere. Esto es **crítico**.
+1. **~~La cámara es el punto único de fallo de la demo.~~ (SUPERADO).** La cámara es un **sentido de Alexa**, no el producto. Si la Vivotek no está, la **memoria sembrada + conversación + QFP** siguen siendo demostrables sin cámara. Mitigación real: memoria como núcleo de la demo (`PROJECT_VISION_ALIGNMENT.md` §5–§6).
 2. **Latencia de Bedrock en vivo.** Si el jurado sigue con Amazon, en la demo la red/AWS puede tardar; el Quota Fallback Protocol cubre caída, pero no la latencia bruta. Mitigación: el watchdog da respuesta en <1s sin LLM; el texto LLM puede tardar 2–5s.
 3. **Dashboard depende de Tailwind CSS vía CDN.** Sin internet en el venue, la UI queda sin estilo. Riesgo medio, mitigable (bundlear CSS).
-4. **Trabajo sin commitear de memoria.** Si se pierde el working tree, se pierde el diferenciador del proyecto.
+4. **~~Trabajo sin commitear de memoria.~~ (RESUELTO).** El diferenciador está versionado en `093a8ad` (rama `checkpoint/day1-mobile-memory`); pendiente push/PR antes de la entrega (ver `DEVPOST_CHECKLIST.md`).
 5. **Lifespan real ≠ lifespan en tests.** El wiring de bridge/memoria/watcher no se ejecuta en la suite hasta uvicorn real. Riesgo de "funciona en unit, falla en vivo".
 6. **Latencia de casos múltiples de memoria**: embeddings hash (sha256 por token) con 2000 records = nanosegundos; no es riesgo. Pero `MemoryError` cuando se llena: el puente se traga el error (testeado).
 
@@ -77,7 +94,7 @@ Clasificación para maximizar probabilidad de ganar (P0 = imprescindible para la
 | Funcionalidad | Prioridad | Esfuerzo | Impacto demo | Justificación |
 |---|---|---|---|---|
 | **Memoria histórica** | **P0** | ✔ hecho | **Crítico** | Es el diferenciador real que ya está terminado (V1–V3). |
-| **Cámara desde celular** | **P0** | 0.5–1 día | **Crítico** | Elimina el punto único de fallo (#1 técnico). Con el celular del propio stand se demuestra "visión en vivo" sin depender de la Vivotek. |
+| **Cámara desde celular** | P1 | 0.5–1 día | Deseable | Añade un **sentido visual** a Alexa sin depender de la Vivotek. **No es crítico**: la demo se sostiene sobre memoria + conversación (ver banner). |
 | **Hardening/seed + E2E de demo** | **P0** | 1 día | **Alto** | Memoria "sembrada" (datos plausibles de ayer/antier) para que "¿recuerdas de hoy?" y "¿cuándo fue la última vez?" funcionen SIEMPRE, aunque no haya eventos en vivo. |
 | **Voz continua** | **P1** | 1–2 días | Alto | El jurado espera interacción hablada. Sin dispositivo Alexa físico real, el bucle es: teclado→voz del dashboard. Depende de hardware. |
 | **Consulta web ("¿Qué es esto?")** | **P1** | 1–1.5 días | Medio-Alto | Una solo herramienta `web_lookup` + grounding con frame = "sorpresa" que el jurado no espera. Riesgo: NOVA micro razona pobre sobre texto web desconocido. ROI medio. |
@@ -172,7 +189,7 @@ RESPONDER       →  memory_converse (sin LLM) + speakAlexa (TTS 10s-cooldown)
 ## FASE 5 — RUTA CRÍTICA (si solo quedan 3 funcionalidades)
 
 ### 1. Cámara desde celular (P0) — impacto: ALTÍSIMO
-**Justificación técnica:** el watchdog depende de `frame_delta_ratio` sobre frames distintos; con fallback determinista el delta es 0 y la demo de visión muere. Sustituir/paralelizar la fuente de frames es **el único cambio que salva la demo completa** y además es barato (≈0.5–1 día). Sin esto, cualquier cosa que se construya mañana no se podrá demostrar.
+**Justificación técnica:** el watchdog depende de `frame_delta_ratio` sobre frames distintos; con fallback determinista el delta es 0 y esa escena concreta no reacciona. Aun así, **la demo no depende de esto**: la memoria sembrada y la conversación son el núcleo. Este cambio mejora el sentido visual de Alexa; es deseable, **no crítico** para la demo.
 
 ### 2. Memoria sembrada + script E2E (P0) — impacto: ALTO
 La memoria es el diferenciador; que funcione en el jurado depende de que haya eventos. El seed garantiza que "¿cuándo fue la última vez que viste…?" y "¿qué recuerdas de hoy?" **siempre** respondan con datos plausibles. Es el "cono de helado" de la demo: seguro, barato, elimina el riesgo de "memoria vacía".
@@ -205,7 +222,7 @@ El hackathon es de **Alexa**; el jurado espera conversar. Si no hay dispositivo 
 4. **Giro web/objeto [P1]:** foto de un paquete → "un paquete quedó junto a la puerta" → "¿algo así lo había visto antes?" → memoria + (web_lookup para conocimiento extra).
 
 ### 6.3 Mensaje único de la demo
-**"La casa que recuerda": visión + razonamiento + memoria + conversación sobre arquitectura limpia (hexágono + MCP + Quota Fallback)".** 30 segundos de intro y que el sistema hable.
+**"Alexa que recuerda": memoria + conversación como núcleo, con el sentido visual (cámara) y el razonamiento como enablers, sobre arquitectura limpia (hexágono + MCP + Quota Fallback)."** 30 segundos de intro y que **Alexa** hable.
 
 ---
 

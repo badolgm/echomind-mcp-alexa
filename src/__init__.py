@@ -1,4 +1,4 @@
-"""Echosystem - Multimodal Agentic Ecosystem for Alexa+.
+"""EchoMind - Cognitive Memory Agent for Alexa+.
 
 Packages: domain (pure core), application (use cases), infrastructure
 (adapters/IO). Strict hexagonal boundaries apply.
