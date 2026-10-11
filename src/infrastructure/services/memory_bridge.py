@@ -6,6 +6,11 @@ is mapped onto a :class:`MemoryRecord` and persisted through
 ("cuándo ocurrió por última vez") exclusively from local structured memory.
 The bridge is a passive subscriber: it never modifies events, never blocks the
 publisher and never consumes a message meant for the dashboard SSE stream.
+
+Because the watchdog publishes one alert per tick (~0.5s) while an episode is
+active, consecutive alerts that share the same location and detection set are
+*coalesced* into a single episode record (see ``episode_gap``); a walk therefore
+becomes one memory, not hundreds of per-tick duplicates.
 """
 
 from __future__ import annotations
@@ -23,6 +28,26 @@ if TYPE_CHECKING:
     from src.infrastructure.services.memory_service import VectorMemoryService
 
 _ALERT_RISK_LEVELS = ("HIGH", "CRITICAL")
+_EPISODE_GAP_SECONDS = 30.0
+
+
+def _episode_key(record: MemoryRecord) -> tuple[str, tuple[str, ...]]:
+    """Identity of an episode: same location + same set of detection labels."""
+    labels = tuple(sorted(str(item.get("label") or "") for item in record.detections))
+    return (record.location, labels)
+
+
+def _merge_detections(
+    first: tuple[dict[str, object], ...],
+    second: tuple[dict[str, object], ...],
+) -> tuple[dict[str, object], ...]:
+    """Union detections by label, keeping the most recent confidence."""
+    merged: dict[str, dict[str, object]] = {}
+    for item in first:
+        merged[str(item.get("label") or "")] = dict(item)
+    for item in second:
+        merged[str(item.get("label") or "")] = dict(item)
+    return tuple(merged.values())
 
 
 def camera_alert_to_memory_record(
@@ -61,10 +86,13 @@ class MemoryBridge:
         event_hub: EventHub,
         memory: VectorMemoryService,
         risk_levels: tuple[str, ...] = _ALERT_RISK_LEVELS,
+        episode_gap: float = _EPISODE_GAP_SECONDS,
     ) -> None:
         self._hub = event_hub
         self._memory = memory
         self._risk_levels = risk_levels
+        self._episode_gap = episode_gap
+        self._episodes: dict[tuple[str, tuple[str, ...]], MemoryRecord] = {}
         self._queue: asyncio.Queue[Event] | None = None
         self._stop = False
 
@@ -79,14 +107,29 @@ class MemoryBridge:
         return self._queue is not None
 
     def ingest(self, event: Event) -> MemoryRecord | None:
-        """Map and store one event; returns the record or None when skipped."""
+        """Map and store one event; consecutive ticks coalesce into episodes."""
         record = camera_alert_to_memory_record(event, self._risk_levels)
         if record is None:
             return None
+        key = _episode_key(record)
+        existing = self._episodes.get(key)
+        if existing is not None and 0.0 <= record.timestamp - existing.timestamp <= (
+            self._episode_gap
+        ):
+            record = MemoryRecord(
+                id=existing.id,
+                timestamp=record.timestamp,
+                location=record.location,
+                source=record.source,
+                detections=_merge_detections(existing.detections, record.detections),
+                risk=record.risk,
+                model_analysis=record.model_analysis,
+            )
         try:
             self._memory.store_memory(record)
         except MemoryError:
             return None
+        self._episodes[key] = record
         return record
 
     async def consume_next(self) -> MemoryRecord | None:

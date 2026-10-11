@@ -38,6 +38,14 @@ def test_predict_baseline_is_low_without_detections() -> None:
     assert prediction.detections == ()
 
 
+def test_predict_low_without_detections_reports_calm() -> None:
+    prediction = predict_ambient_state(read_sensors(10.0), None, motion_score=0.0)
+    assert prediction.risk_level == "LOW"
+    assert "Sin detecciones activas. Todo normal." in prediction.announcement
+    assert "No active detections. All normal." in prediction.announcement
+    assert "Movimiento" not in prediction.announcement
+
+
 def test_predict_smoke_at_critical_escalates() -> None:
     reading = SensorReading(
         timestamp=1.0,
@@ -241,6 +249,34 @@ async def test_watch_tick_is_silent_when_room_is_still() -> None:
     assert isinstance(watch.last_state["model_analysis"], str)
     assert queue.empty()
     hub.unsubscribe(queue)
+
+
+@pytest.mark.asyncio
+async def test_low_state_model_analysis_is_neutral() -> None:
+    class _StillBus:
+        def read(self, now: float) -> SensorReading:
+            return SensorReading(
+                timestamp=now,
+                temperature_c=24.0,
+                smoke_density=0.05,
+                gate_open=False,
+                door_open=False,
+                pet_proximity=0.2,
+                pet_moving=False,
+            )
+
+    watch = AmbientWatchService(
+        camera=_FakeCamera(_live_frame(b"\x00" * 256)),
+        sensor_bus=_StillBus(),
+        event_hub=EventHub(),
+    )
+    await watch.tick(now=50.0)
+    await watch.tick(now=50.5)
+    assert watch.last_state["risk"] == "LOW"
+    assert watch.last_state["detections"] == []
+    assert watch.last_state["model_analysis"] == (
+        "Sin detecciones activas. Todo normal.\nNo active detections. All normal."
+    )
 
 
 @pytest.mark.asyncio

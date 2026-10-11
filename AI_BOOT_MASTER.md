@@ -20,6 +20,13 @@
 > → Acción`. **La cámara NO es el producto. La Vivotek NO es el producto. Android NO es el
 > producto.** Todos son **sensores o dispositivos del ecosistema de Alexa**.
 
+> ### ✅ CHECKPOINT ACTUAL (2026-10-11) — **GO PARA VIDEO**
+> - **208 tests PASS** (`pytest -q`) · `flake8` limpio · `black --check` limpio.
+> - **BUG 1 corregido** — el panel ya no anuncia "movimiento" en `LOW`/`0%`/`[]` (aviso neutro ES/EN).
+> - **BUG 2 corregido** — *Episode Coalescing*: una caminata = **un** recuerdo (no N).
+> - Motion Fix, Voice Dock, DemoSeed, Bilingüismo y visión EchoMind/Alexa+ validados.
+> - Detalle: `CHECKPOINT_DAY2_SUMMARY.md` · `UX_CLEANUP_REPORT.md`.
+
 ---
 
 ## 1. Identidad del proyecto
@@ -50,13 +57,14 @@ La **cámara es solo uno de los sentidos**; el valor es la memoria y la conversa
 | Indicador | Estado |
 | --- | --- |
 | Rama de trabajo | `checkpoint/day1-mobile-memory` |
-| HEAD | **`093a8ad`** — `feat: demo seed, bilingual memory converse, voice dock and motion fixes` |
-| Árbol de trabajo | **Limpio** (`git status` sin cambios) |
+| HEAD | **`407ca29`** — `docs: align EchoMind vision, Alexa+ narrative and hackathon strategy` |
+| Árbol de trabajo | **Con cambios locales sin commitear** — BUG 1 + BUG 2 + `UX_CLEANUP_REPORT.md` (ver `CHECKPOINT_DAY2_SUMMARY.md` → FASE 4) |
 | Push | **Nunca realizado** (`origin` existe pero no se ha subido nada) |
-| Tests | **203 passed** (`pytest -q`) |
+| Tests | **208 passed** (`pytest -q`) — 203 previos + 5 nuevos |
 | flake8 | **0 violaciones** (`flake8 src tests`) |
 | black | **Limpio** (`black --check src tests --line-length 88`) |
 | Validación | Membresía de demo validada con navegador real (Chrome + Puppeteer): Seed, `/api/converse` EN/ES, micrófono (ruta STT) y TTS `en-US`/`es-ES`. `PAGE_ERRORS: []`. |
+| **GO PARA VIDEO** | ✅ Motion Fix confirmado · Episode Coalescing (BUG 2) · aviso neutro (BUG 1) · 208 tests PASS |
 
 **Gates obligatorias antes de cerrar cualquier fase** (PowerShell, venv explícito):
 
@@ -162,7 +170,8 @@ domain  ←  application  ←  infrastructure        (las flechas apuntan SIEMPR
 | --- | --- | --- | --- |
 | Day 1 recovery point | `eee7355` | `HACKATHON_CHECKPOINT_DAY1.md` · `CHECKPOINT_DAY1_SUMMARY.md` | Punto de recuperación: rama, commit y ZIP de respaldo |
 | Day 1 feature | `0789ce4` | — | Memoria histórica V1-V3 + fuente de cámara Android |
-| **Estado validado actual** | **`093a8ad`** | **este archivo** | DemoSeed, converse bilingüe, Voice Dock y fixes de movimiento |
+| **Estado validado actual** | **`407ca29`** | **este archivo** | Visión EchoMind alineada, narrativa Alexa+ |
+| **Checkpoint Day 2** | **`407ca29`** (+ cambios locales) | **`CHECKPOINT_DAY2_SUMMARY.md`** · `UX_CLEANUP_REPORT.md` | 208 tests PASS, BUG 1 + BUG 2 corregidos, GO PARA VIDEO |
 
 - Rama de checkpoint: **`checkpoint/day1-mobile-memory`**.
 - `main` permanece intacta en `92029c3` (no se ha mezclado).
@@ -173,7 +182,8 @@ domain  ←  application  ←  infrastructure        (las flechas apuntan SIEMPR
 ## 5. Commits importantes (más reciente primero)
 
 ```
-093a8ad  feat: demo seed, bilingual memory converse, voice dock and motion fixes   ← HEAD
+407ca29  docs: align EchoMind vision, Alexa+ narrative and hackathon strategy       ← HEAD
+093a8ad  feat: demo seed, bilingual memory converse, voice dock and motion fixes
 eee7355  docs(checkpoint): record day1 recovery point (branch, commit, zip)
 0789ce4  feat: add historical memory (V1-V3) and Android phone camera source
 92029c3  feat(watchdog): add visual trigger filtering and 10s speech cooldown       ← main
@@ -185,7 +195,7 @@ bc6e4d7  feat(dashboard): add dynamic camera selector, Alexa device catalog and 
 
 ---
 
-## 6. Tests actuales (203 passed)
+## 6. Tests actuales (208 passed)
 
 **Integración** (`tests/integration/`):
 `test_main_composition.py` · `test_mcp_streaming_session.py` · `test_memory_api_routes.py` ·
@@ -202,6 +212,11 @@ bc6e4d7  feat(dashboard): add dynamic camera selector, Alexa device catalog and 
 
 > Ejecutar con `.\.venv\Scripts\python.exe -m pytest -q`. Todo offline.
 
+**Nuevos (+5, 208-203)** — `test_ambient_watch_service.py`:
+`test_predict_low_without_detections_reports_calm`, `test_low_state_model_analysis_is_neutral`;
+`test_memory_bridge.py`: `test_consecutive_motion_ticks_coalesce_into_one_episode`,
+`test_motion_after_gap_starts_a_new_episode`, `test_distinct_detection_sets_are_distinct_episodes`.
+
 ---
 
 ## 7. Componentes terminados
@@ -216,6 +231,8 @@ bc6e4d7  feat(dashboard): add dynamic camera selector, Alexa device catalog and 
 | **Voice Dock** | ✅ | `src/static/dashboard.html` — seed, input, mic (`SpeechRecognition`), `LANG EN/ES`, TTS (`speakAlexa`), pills. Fix de `renderBoxes()` (re-inserta `alertEl` + null-guards). |
 | **Bilingüismo EN/ES** | ✅ | Clasificador con hints ES/EN (`_SPANISH_HINTS`/`_ENGLISH_HINTS`) + `lang` explícito. Validado en navegador. |
 | **Motion Detection** | ✅ corregido | `ambient_watch_service.py`: `_image_payload()` recorta hasta SOS/IDAT (ignora EXIF de IP Webcam) y `MOTION_THRESHOLD = 0.20`. Evidencia: delta EXIF-only = 0.0, cambio real = 0.9998. |
+| **BUG 1 — aviso neutro** | ✅ corregido | `ambient_watch_service.py`: `_NEUTRAL_ANNOUNCEMENT` + `_announcement()` — en `LOW`/`0%`/`[]` ya no anuncia "movimiento"; `model_analysis` coherente con `risk`. |
+| **BUG 2 — Episode Coalescing** | ✅ corregido | `memory_bridge.py`: coalescing por episodio (`location` + set de labels, `episode_gap=30 s`). 60 ticks → **1** recuerdo MOTION. |
 | **MCP funcional** | ✅ | `src/infrastructure/adapters/mcp/fastapi_mcp_adapter.py` + `alexa_skill/skill.json`. |
 | **Dashboard** | ✅ | `src/infrastructure/adapters/mcp/web_dashboard.py` sirve `src/static/dashboard.html`. |
 | **QFP (resiliencia)** | ✅ | `src/infrastructure/adapters/aws/fallback_llm_adapter.py` (`ResilientLLMAdapter`, `RuleBasedLLMAdapter`). |
@@ -235,7 +252,8 @@ bc6e4d7  feat(dashboard): add dynamic camera selector, Alexa device catalog and 
 5. **Residuales cosméticos** — `404 /favicon.ico` y `<polyline> NaN` en el sparkline (preexistente,
    no bloquea).
 6. **Sin push** — el trabajo vive solo en local. Commitear/empujar antes de la entrega si se desea
-   respaldo remoto.
+   respaldo remoto. **Cambios sin commitear:** BUG 1 + BUG 2 + `UX_CLEANUP_REPORT.md`
+   (ver `CHECKPOINT_DAY2_SUMMARY.md` → FASE 4).
 
 ---
 
@@ -332,12 +350,12 @@ src/infrastructure/services/demo_seed_service.py     DemoSeed (5 registros)
 src/infrastructure/services/sensor_bus.py            sensores simulados (ciclo 120 s)
 src/static/dashboard.html                            Control Center + Voice Dock
 alexa_skill/skill.json                               manifest Alexa+ (MCP Streamable)
-tests/unit · tests/integration                       203 tests
+tests/unit · tests/integration                       208 tests
 ```
 
 **Docs relacionados:** `PROJECT_VISION_ALIGNMENT.md` (visión oficial) · `README.md` ·
 `MASTERDOC.md` · `AI_INSTRUCTIONS.md` · `MEMORY_ARCHITECTURE_V1.md` · `HACKATHON_MASTER_PLAN.md` ·
-`HACKATHON_CHECKPOINT_DAY1.md` · `CHECKPOINT_DAY1_SUMMARY.md` · `DEMO_SCRIPT_V1.md` ·
-`VIDEO_RECORDING_GUIDE.md` · `DEVPOST_CHECKLIST.md`.
+`HACKATHON_CHECKPOINT_DAY1.md` · `CHECKPOINT_DAY1_SUMMARY.md` · `CHECKPOINT_DAY2_SUMMARY.md` ·
+`DEMO_SCRIPT_V1.md` · `VIDEO_RECORDING_GUIDE.md` · `DEVPOST_CHECKLIST.md` · `UX_CLEANUP_REPORT.md`.
 
-_Última actualización: 2026-10-11 · Fase: documentación maestra y preparación de entrega · HEAD `093a8ad`._
+_Última actualización: 2026-10-11 · Fase: checkpoints de documentación y protección de estado · HEAD `407ca29` (+ BUG 1/BUG 2 sin commitear)._

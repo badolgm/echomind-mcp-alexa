@@ -138,3 +138,42 @@ def test_bridge_survives_a_full_memory_store() -> None:
     bridge = MemoryBridge(event_hub=EventHub(), memory=memory)
     assert bridge.ingest(_alert(ts=1700000000.0)) is None
     assert memory.size == 1
+
+
+def _motion_alert(ts: float) -> dict[str, object]:
+    return _alert(
+        ts=ts,
+        location="camera",
+        detections=[{"label": "MOTION", "confidence": 0.85}],
+        model_analysis="Atención: movimiento detectado.\nActúa ya.",
+    )
+
+
+def test_consecutive_motion_ticks_coalesce_into_one_episode() -> None:
+    memory = VectorMemoryService()
+    bridge = MemoryBridge(event_hub=EventHub(), memory=memory, episode_gap=30.0)
+    for i in range(60):
+        bridge.ingest(_motion_alert(1700000000.0 + i * 0.5))
+    assert memory.size == 1
+    assert memory.count_occurrences("MOTION") == 1
+    record = memory.last_seen(label="MOTION")
+    assert record is not None
+    assert record.timestamp == 1700000000.0 + 59 * 0.5
+
+
+def test_motion_after_gap_starts_a_new_episode() -> None:
+    memory = VectorMemoryService()
+    bridge = MemoryBridge(event_hub=EventHub(), memory=memory, episode_gap=30.0)
+    bridge.ingest(_motion_alert(1700000000.0))
+    bridge.ingest(_motion_alert(1700000000.5))
+    bridge.ingest(_motion_alert(1700000100.0))
+    assert memory.size == 2
+    assert memory.count_occurrences("MOTION") == 2
+
+
+def test_distinct_detection_sets_are_distinct_episodes() -> None:
+    memory = VectorMemoryService()
+    bridge = MemoryBridge(event_hub=EventHub(), memory=memory)
+    bridge.ingest(_motion_alert(1700000000.0))
+    bridge.ingest(_alert(ts=1700000000.5))
+    assert memory.size == 2

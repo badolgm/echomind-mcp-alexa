@@ -45,6 +45,10 @@ _RECOMMENDATIONS_ES: dict[str, str] = {
     "LOW": "Sigue monitoreando: todo se ve normal.",
 }
 
+_NEUTRAL_ANNOUNCEMENT = (
+    "Sin detecciones activas. Todo normal.\n" "No active detections. All normal."
+)
+
 _SEVERITY = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
 
 
@@ -195,10 +199,9 @@ def _announcement(risk: str, detections: dict[str, float]) -> str:
         "HIGH": "Atención: ",
         "MEDIUM": "Aviso: ",
     }.get(risk, "")
-    if phrases:
-        body = "Detecciones: " + ", ".join(phrases) + ". "
-    else:
-        body = "Movimiento o cambio detectado en la cámara. "
+    if not phrases:
+        return prefix + _NEUTRAL_ANNOUNCEMENT
+    body = "Detecciones: " + ", ".join(phrases) + ". "
     return prefix + body + _RECOMMENDATIONS_ES[risk]
 
 
@@ -248,7 +251,11 @@ class AmbientWatchService:
 
         detections = [dict(item) for item in prediction.detections]
         self._camera.record_detections(detections, frame.source)
-        model_analysis_text = f"{prediction.announcement}\n{prediction.recommendation}"
+        model_analysis_text = (
+            f"{prediction.announcement}\n{prediction.recommendation}"
+            if detections
+            else prediction.announcement
+        )
         self._last_state = {
             "risk": prediction.risk_level,
             "signals": list(prediction.signals),
