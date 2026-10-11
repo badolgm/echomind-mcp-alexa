@@ -24,7 +24,7 @@ from src.infrastructure.services.sensor_bus import SensorReading
 if TYPE_CHECKING:
     from src.infrastructure.adapters.iot.vivotek_adapter import CameraFrameSource
 
-MOTION_THRESHOLD = 0.10
+MOTION_THRESHOLD = 0.20
 _WATCH_ALERT_LEVELS = ("HIGH", "CRITICAL")
 _ALERT_TRIGGERS = frozenset({"GATE_OPEN", "PET_ESCAPING", "MOTION"})
 
@@ -59,6 +59,30 @@ class AmbientPrediction:
     recommendation: str
 
 
+def _image_payload(data: bytes) -> bytes:
+    """Strip container headers so comparison ignores JPEG EXIF timestamps.
+
+    Android IP Webcam embeds a fresh timestamp/EXIF block on every snapshot,
+    so raw-byte comparison of two static-scene JPEGs reports a large delta
+    even though the pixels are identical. Trimming the container (everything
+    before the SOS marker for JPEG, everything before IDAT for PNG) focuses
+    the delta on the entropy-coded pixel data, where real motion dominates.
+    """
+    if data.startswith(b"\xff\xd8"):
+        sos = data.rfind(b"\xff\xda")
+        if sos != -1 and sos + 4 <= len(data):
+            header_len = int.from_bytes(data[sos + 2 : sos + 4], "big")
+            start = sos + 2 + header_len
+            return data[start:]
+        return data
+    if data.startswith(b"\x89PNG"):
+        idat = data.find(b"IDAT")
+        if idat != -1:
+            return data[idat:]
+        return data
+    return data
+
+
 def frame_delta_ratio(first: bytes, second: bytes) -> float:
     """Fraction of sampled bytes that differ between two frames.
 
@@ -68,6 +92,8 @@ def frame_delta_ratio(first: bytes, second: bytes) -> float:
     """
     if not first or not second:
         return 0.0
+    first = _image_payload(first)
+    second = _image_payload(second)
     samples = 4096
     n = min(len(first), len(second))
     step = max(1, n // samples)

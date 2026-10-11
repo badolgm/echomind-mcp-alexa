@@ -50,6 +50,12 @@ from src.infrastructure.adapters.iot.vivotek_adapter import (
 from src.infrastructure.config.event_hub import EventHub
 from src.infrastructure.config.telemetry import Telemetry
 from src.infrastructure.services.ambient_watch_service import AmbientWatchService
+from pydantic import BaseModel
+
+from src.infrastructure.adapters.mcp.memory_resolvers import (
+    build_memory_converse_resolver,
+)
+from src.infrastructure.services.demo_seed_service import seed_demo_memory
 from src.infrastructure.services.memory_bridge import MemoryBridge
 from src.infrastructure.services.memory_service import VectorMemoryService
 from src.infrastructure.services.sensor_bus import SimulatedSensorBus
@@ -154,11 +160,51 @@ def compose() -> FastAPI:
     app = server.app
     app.add_api_route(HEALTH_ROUTE, _health, methods=["GET"])
     app.add_api_route(METRICS_ROUTE, _metrics(telemetry, llm_service), methods=["GET"])
+    if os.environ.get("ECHOMIND_DEMO_SEED", "0").lower() in ("1", "true", "yes"):
+        seed_demo_memory(memory_service)
     mount_dashboard(app, event_hub)
     mount_camera_routes(app, camera, watch=watch)
     mount_phone_camera_routes(app, camera, watch=watch)
+    mount_memory_api_routes(app, memory_service, watch=watch)
     _attach_watchdog_lifespan(app, watch, memory_bridge)
     return app
+
+
+class ConverseRequest(BaseModel):
+    query: str
+    lang: str | None = None
+
+
+def mount_memory_api_routes(
+    app: FastAPI,
+    memory: VectorMemoryService,
+    watch: AmbientWatchService | None = None,
+) -> None:
+    """Mount lightweight JSON endpoints for dashboard demo seed and converse."""
+
+    @app.post("/api/demo/seed")
+    async def post_demo_seed() -> dict[str, object]:
+        records = seed_demo_memory(memory)
+        return {
+            "status": "ok",
+            "seeded": len(records),
+            "records": [r.id for r in records],
+        }
+
+    @app.post("/api/converse")
+    async def post_converse(payload: ConverseRequest) -> dict[str, object]:
+        query = payload.query.strip()
+        if not query:
+            return {
+                "error": "query is required",
+                "is_error": True,
+                "response": "",
+            }
+        state_provider = (lambda: watch.last_state) if watch else None
+        resolver = build_memory_converse_resolver(memory, current_state=state_provider)
+        resp = await resolver({"query": query, "lang": payload.lang})
+        text = resp.content[0].data if resp.content else ""
+        return {"response": text, "is_error": resp.is_error}
 
 
 def _attach_watchdog_lifespan(
