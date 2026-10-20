@@ -144,7 +144,11 @@ async def test_watch_tick_records_detections_and_publishes_alert() -> None:
     hub = EventHub()
     queue = hub.subscribe()
     camera = _FakeCyclingCamera(
-        [_live_frame(b"\x00" * 256), _live_frame(b"\xff" * 256)]
+        [
+            _live_frame(b"\x00" * 256),
+            _live_frame(b"\xff" * 256),
+            _live_frame(b"\x00" * 256),
+        ]
     )
     watch = AmbientWatchService(
         camera=camera,
@@ -153,7 +157,8 @@ async def test_watch_tick_records_detections_and_publishes_alert() -> None:
     )
 
     await watch.tick(now=1.0)
-    prediction = await watch.tick(now=1.5)
+    await watch.tick(now=1.5)
+    prediction = await watch.tick(now=2.0)
 
     assert prediction.risk_level == "HIGH"
     assert camera.source == "live"
