@@ -14,6 +14,7 @@ and alerting 24/7 even behind the Quota Fallback Protocol.
 from __future__ import annotations
 
 import asyncio
+import io
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
     from src.infrastructure.adapters.iot.vivotek_adapter import CameraFrameSource
 
 MOTION_THRESHOLD = 0.20
+MOTION_PIXEL_DIFF_THRESHOLD = 20
+MOTION_CONFIRMATION_FRAMES = 1
 _WATCH_ALERT_LEVELS = ("HIGH", "CRITICAL")
 _ALERT_TRIGGERS = frozenset({"GATE_OPEN", "PET_ESCAPING", "MOTION"})
 
@@ -88,25 +91,45 @@ def _image_payload(data: bytes) -> bytes:
 
 
 def frame_delta_ratio(first: bytes, second: bytes) -> float:
-    """Fraction of sampled bytes that differ between two frames.
+    """Fraction of pixels that differ significantly between two frames.
 
-    A coarse but real motion proxy for compressed JPEG snapshots: consecutive
-    frames of a static scene are near-identical, so a high delta ratio means
-    the scene is actually changing (movement/zoom/lighting shift).
+    Decodes both JPEG/PNG snapshots to a small grayscale thumbnail and counts
+    pixels whose brightness differs by more than ``MOTION_PIXEL_DIFF_THRESHOLD``.
+    This is robust against JPEG re-quantization noise (which changes compressed
+    bytes but barely changes decoded pixels) while reliably detecting real
+    motion (hand, mouse, person) that shifts pixel values across whole regions.
     """
     if not first or not second:
         return 0.0
-    first = _image_payload(first)
-    second = _image_payload(second)
-    samples = 4096
-    n = min(len(first), len(second))
-    step = max(1, n // samples)
-    checked = (n + step - 1) // step
+    try:
+        from PIL import Image
+
+        size = (48, 48)
+        img_a = Image.open(io.BytesIO(first)).convert("L").resize(size)
+        img_b = Image.open(io.BytesIO(second)).convert("L").resize(size)
+        pixels_a = img_a.tobytes()
+        pixels_b = img_b.tobytes()
+    except Exception:
+        first = _image_payload(first)
+        second = _image_payload(second)
+        samples = 4096
+        n = min(len(first), len(second))
+        step = max(1, n // samples)
+        checked = (n + step - 1) // step
+        if checked == 0:
+            return 0.0
+        changed = 0
+        for index in range(0, n, step):
+            if abs(first[index] - second[index]) >= 4:
+                changed += 1
+        return changed / checked
+
+    checked = len(pixels_a)
     if checked == 0:
         return 0.0
     changed = 0
-    for index in range(0, n, step):
-        if first[index] != second[index]:
+    for index in range(checked):
+        if abs(pixels_a[index] - pixels_b[index]) >= MOTION_PIXEL_DIFF_THRESHOLD:
             changed += 1
     return changed / checked
 
@@ -224,6 +247,7 @@ class AmbientWatchService:
         self._motion_threshold = motion_threshold
         self._prev_payload = b""
         self._prev_reading: SensorReading | None = None
+        self._motion_streak = 0
         self._stop = False
         self._last_state: dict[str, Any] = {
             "risk": "LOW",
@@ -246,7 +270,17 @@ class AmbientWatchService:
             motion = frame_delta_ratio(self._prev_payload, frame.data)
         self._prev_payload = frame.data
 
-        prediction = predict_ambient_state(reading, self._prev_reading, motion)
+        if motion >= self._motion_threshold:
+            self._motion_streak += 1
+        else:
+            self._motion_streak = 0
+        confirmed_motion = (
+            motion if self._motion_streak >= MOTION_CONFIRMATION_FRAMES else 0.0
+        )
+
+        prediction = predict_ambient_state(
+            reading, self._prev_reading, confirmed_motion
+        )
         self._prev_reading = reading
 
         detections = [dict(item) for item in prediction.detections]

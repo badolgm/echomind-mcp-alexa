@@ -12,11 +12,13 @@ import time
 from typing import Any, Callable, Mapping
 
 from src.domain.ports.output.mcp_port import MCPContentItem, MCPResponse
+from src.domain.services.current_state_reasoning import render_state_answer
 from src.domain.services.memory_intent import (
     MemoryIntent,
     MemoryIntentClassifier,
     MemoryIntentType,
 )
+from src.domain.services.query_router import QueryKind, StateTopic, route_query
 from src.infrastructure.adapters.mcp.fastapi_mcp_adapter import ToolHandler
 from src.infrastructure.services.memory_service import (
     MemoryRecord,
@@ -24,7 +26,13 @@ from src.infrastructure.services.memory_service import (
 )
 
 MEMORY_TOOL_NAMES = frozenset(
-    {"memory_last_seen", "memory_search", "memory_summary", "memory_converse"}
+    {
+        "memory_last_seen",
+        "memory_search",
+        "memory_summary",
+        "memory_converse",
+        "memory_recall",
+    }
 )
 
 _DESCRIPTORS_ES: dict[str, str] = {
@@ -467,6 +475,18 @@ def _current_state_answer(
     return _text(sentence)
 
 
+def _read_live_state(
+    current_state: Callable[[], Mapping[str, Any]] | None,
+) -> Mapping[str, Any]:
+    """Best-effort read of the live snapshot (absent/failed provider → {})."""
+    if current_state is None:
+        return {}
+    try:
+        return dict(current_state() or {})
+    except Exception:  # noqa: BLE001 - live state is best-effort
+        return {}
+
+
 def build_memory_converse_resolver(
     memory: VectorMemoryService,
     current_state: Callable[[], Mapping[str, Any]] | None = None,
@@ -483,6 +503,21 @@ def build_memory_converse_resolver(
         lang_arg = str(arguments.get("lang") or "").strip() or None
         if not query:
             return _error("the 'query' argument is required")
+        decision = route_query(query, lang_arg)
+        if (
+            decision.kind is QueryKind.CURRENT_STATE
+            and decision.topic is not StateTopic.OVERVIEW
+        ):
+            # A7C: the question is about the live home state, not about
+            # history — answer from watch.last_state and never from the store.
+            return _text(
+                render_state_answer(
+                    decision.topic.value,
+                    _read_live_state(current_state),
+                    lang=decision.lang,
+                    polarity=decision.polarity,
+                )
+            )
         intent = classifier.classify(query, lang=lang_arg)
         if intent.intent is MemoryIntentType.LAST_SEEN:
             if not intent.label:
@@ -525,6 +560,14 @@ def build_memory_resolver(
         return _unavailable_memory_resolver()
     if tool_name == "memory_converse":
         return build_memory_converse_resolver(memory, current_state)
+    if tool_name == "memory_recall":
+        # Imported lazily so the production V1 import graph stays untouched and
+        # the experimental recall engine is only loaded when explicitly routed.
+        from src.infrastructure.adapters.mcp.recall_resolvers import (
+            build_memory_recall_resolver,
+        )
+
+        return build_memory_recall_resolver(memory)
     builders: Mapping[str, Callable[[VectorMemoryService], ToolHandler]] = {
         "memory_last_seen": build_memory_last_seen_resolver,
         "memory_search": build_memory_search_resolver,

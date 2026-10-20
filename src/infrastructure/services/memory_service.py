@@ -24,7 +24,12 @@ _RISK_SEVERITY = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
 
 @dataclass(frozen=True, slots=True)
 class MemoryRecord:
-    """One persisted observation in the local memory store."""
+    """One persisted observation in the local memory store.
+
+    ``camera_id`` and ``zone`` are optional spatial metadata added by the
+    Memory Spatial Foundation: every pre-existing construction keeps working
+    unchanged because both default to ``None`` (degraded to ``location``).
+    """
 
     id: str
     timestamp: float
@@ -33,6 +38,8 @@ class MemoryRecord:
     detections: tuple[dict[str, object], ...]
     risk: str
     model_analysis: str
+    camera_id: str | None = None
+    zone: str | None = None
 
 
 def _tokens(text: str) -> tuple[str, ...]:
@@ -129,6 +136,33 @@ class VectorMemoryService:
                 scored.append((record, round(score, 4)))
         scored.sort(key=lambda pair: (-pair[1], -pair[0].timestamp))
         return scored[:limit]
+
+    def records_between(
+        self,
+        since: float | None = None,
+        until: float | None = None,
+        *,
+        location: str | None = None,
+        risk: str | None = None,
+    ) -> list[MemoryRecord]:
+        """Return stored memories inside a time window, oldest first.
+
+        Purely additive read: it filters only and never mutates the store, so
+        every existing method keeps its behaviour. A ``None`` bound means
+        unbounded on that side, and ties are broken by ``id`` for a stable
+        timeline.
+        """
+        normalized_risk = risk.upper() if risk else None
+        windowed = [
+            record
+            for record in self._records.values()
+            if (since is None or record.timestamp >= since)
+            and (until is None or record.timestamp <= until)
+            and (location is None or record.location == location)
+            and (normalized_risk is None or record.risk.upper() == normalized_risk)
+        ]
+        windowed.sort(key=lambda record: (record.timestamp, record.id))
+        return windowed
 
     def last_seen(
         self,

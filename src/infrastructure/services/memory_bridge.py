@@ -37,6 +37,18 @@ def _episode_key(record: MemoryRecord) -> tuple[str, tuple[str, ...]]:
     return (record.location, labels)
 
 
+def _optional_spatial(value: object) -> str | None:
+    """Read optional spatial metadata from an event, blanks meaning absent.
+
+    Existing ``camera_alert`` events carry neither key, so this degrades to
+    ``None`` and today's mapping stays byte for byte identical.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
 def _merge_detections(
     first: tuple[dict[str, object], ...],
     second: tuple[dict[str, object], ...],
@@ -74,6 +86,8 @@ def camera_alert_to_memory_record(
         model_analysis=str(
             event.get("model_analysis") or event.get("announcement") or ""
         ),
+        camera_id=_optional_spatial(event.get("camera_id")),
+        zone=_optional_spatial(event.get("zone")),
     )
 
 
@@ -124,6 +138,8 @@ class MemoryBridge:
                 detections=_merge_detections(existing.detections, record.detections),
                 risk=record.risk,
                 model_analysis=record.model_analysis,
+                camera_id=record.camera_id,
+                zone=record.zone,
             )
         try:
             self._memory.store_memory(record)
