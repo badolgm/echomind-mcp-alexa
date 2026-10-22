@@ -31,7 +31,7 @@ from src.infrastructure.adapters.iot.vivotek_adapter import (
 
 DEFAULT_PHONE_URL = "http://192.168.1.20:8080/shot.jpg"
 DEFAULT_PHONE_TIMEOUT = 2.5
-DEFAULT_PHONE_CACHE_TTL = 1.5
+DEFAULT_PHONE_CACHE_TTL = 0.4
 
 
 class HttpPhoneCameraAdapter:

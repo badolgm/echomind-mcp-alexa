@@ -259,6 +259,7 @@ class MemoryIntentClassifier:
             return MemoryIntent(
                 MemoryIntentType.SUMMARY,
                 query=query,
+                location=self._extract_location(normalized),
                 hours=self._extract_hours(normalized) or 24.0,
                 lang=chosen_lang,
             )
@@ -266,6 +267,7 @@ class MemoryIntentClassifier:
         return MemoryIntent(
             MemoryIntentType.SEARCH,
             query=query,
+            location=self._extract_location(normalized),
             hours=self._extract_hours(normalized),
             lang=chosen_lang,
         )

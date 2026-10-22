@@ -55,6 +55,10 @@ from pydantic import BaseModel
 from src.infrastructure.adapters.mcp.memory_resolvers import (
     build_memory_converse_resolver,
 )
+from src.infrastructure.adapters.mcp.recall_resolvers import (
+    recall,
+    recall_result_payload,
+)
 from src.infrastructure.services.demo_seed_service import seed_demo_memory
 from src.infrastructure.services.memory_bridge import MemoryBridge
 from src.infrastructure.services.memory_service import VectorMemoryService
@@ -133,6 +137,14 @@ def compose() -> FastAPI:
         on_fallback=telemetry.fallback_listener,
     )
     camera = _build_camera()
+    vivotek_camera = VivotekCameraAdapter(
+        host=os.environ.get(_ENV_VIVOTEK_IP, VIVOTEK_DEFAULT_HOST)
+    )
+    phone_camera = HttpPhoneCameraAdapter(
+        url=os.environ.get(_ENV_PHONE_URL, DEFAULT_PHONE_URL),
+        timeout=_read_env_float(_ENV_PHONE_TIMEOUT, DEFAULT_PHONE_TIMEOUT),
+        cache_ttl=_read_env_float(_ENV_PHONE_CACHE_TTL, DEFAULT_PHONE_CACHE_TTL),
+    )
     watch = AmbientWatchService(
         camera=camera,
         sensor_bus=SimulatedSensorBus(),
@@ -163,16 +175,24 @@ def compose() -> FastAPI:
     if os.environ.get("ECHOMIND_DEMO_SEED", "0").lower() in ("1", "true", "yes"):
         seed_demo_memory(memory_service)
     mount_dashboard(app, event_hub)
-    mount_camera_routes(app, camera, watch=watch)
-    mount_phone_camera_routes(app, camera, watch=watch)
+    mount_camera_routes(app, vivotek_camera, watch=watch)
+    mount_phone_camera_routes(app, phone_camera, watch=watch)
     mount_memory_api_routes(app, memory_service, watch=watch)
-    _attach_watchdog_lifespan(app, watch, memory_bridge)
+    _attach_watchdog_lifespan(
+        app, watch, memory_bridge, cameras=[camera, vivotek_camera, phone_camera]
+    )
     return app
 
 
 class ConverseRequest(BaseModel):
     query: str
     lang: str | None = None
+
+
+class RecallRequest(BaseModel):
+    query: str
+    lang: str | None = None
+    session_start: float | None = None
 
 
 def mount_memory_api_routes(
@@ -206,11 +226,31 @@ def mount_memory_api_routes(
         text = resp.content[0].data if resp.content else ""
         return {"response": text, "is_error": resp.is_error}
 
+    @app.post("/api/recall")
+    async def post_recall(payload: RecallRequest) -> dict[str, object]:
+        """Experimental parallel channel: recall engine answers with evidence."""
+        query = payload.query.strip()
+        if not query:
+            return {
+                "error": "query is required",
+                "is_error": True,
+                "response": "",
+            }
+        result = recall(
+            memory,
+            query,
+            lang=payload.lang,
+            session_start=payload.session_start,
+            state_provider=(lambda: watch.last_state) if watch else None,
+        )
+        return recall_result_payload(result)
+
 
 def _attach_watchdog_lifespan(
     app: FastAPI,
     watch: AmbientWatchService,
     memory_bridge: MemoryBridge | None = None,
+    cameras: list[CameraFrameSource] | None = None,
 ) -> None:
     """Start/stop the ambient watchdog and memory bridge with the app lifecycle."""
 
@@ -229,6 +269,11 @@ def _attach_watchdog_lifespan(
             try:
                 await task
             except asyncio.CancelledError:
+                pass
+        for cam in cameras or []:
+            try:
+                await cam.aclose()
+            except Exception:
                 pass
 
     app.router.lifespan_context = lifespan

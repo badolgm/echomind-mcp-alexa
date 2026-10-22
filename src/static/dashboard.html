@@ -662,27 +662,60 @@
   var currentLang = "en";
   var voiceLastText = "";
   var voiceLastAt = 0;
-  function speakAlexa(text, lang) {
+  var speechVoices = [];
+  function refreshSpeechVoices() {
+    if (window.speechSynthesis) speechVoices = window.speechSynthesis.getVoices() || [];
+  }
+  refreshSpeechVoices();
+  if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = refreshSpeechVoices;
+  var currentUtterance = null;
+  var isDockSpeaking = false;
+  function speakAlexa(text, lang, source) {
     try {
       if (!window.speechSynthesis) return;
       var now = Date.now();
       if (text === voiceLastText && now - voiceLastAt < 10000) return;
       voiceLastText = text;
       voiceLastAt = now;
-      window.speechSynthesis.cancel();
+      if (source === "alert" && isDockSpeaking) return;
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+        window.speechSynthesis.cancel();
+      }
       var targetLang = lang || currentLang || "en";
+      var voices = speechVoices.length ? speechVoices : (window.speechSynthesis.getVoices() || []);
+      var prefix = targetLang.toLowerCase().slice(0, 2);
+      var langMatches = [];
+      for (var i = 0; i < voices.length; i++) {
+        var vlang = (voices[i].lang || "").toLowerCase();
+        if (vlang.indexOf(prefix) === 0) langMatches.push(voices[i]);
+      }
+      var EN_MALE = /(male|david|mark|guy|george|paul|mike|richard|thomas|james|daniel|alex|matthew|joey|brian|fred|russell)/;
+      var ES_PREF = /(helena|pablo|laura|maría|maria|sabina|diego|monica|paulina)/;
+      var voice = null;
+      if (langMatches.length) {
+        if (targetLang === "en") {
+          voice = langMatches.find(function (v) { return EN_MALE.test((v.name || "").toLowerCase()); }) || langMatches[0];
+        } else if (targetLang === "es") {
+          voice = langMatches.find(function (v) { return ES_PREF.test((v.name || "").toLowerCase()); }) || langMatches[0];
+        } else {
+          voice = langMatches[0];
+        }
+      }
       var utter = new SpeechSynthesisUtterance(text);
-      utter.lang = targetLang === "en" ? "en-US" : "es-ES";
       utter.rate = 1.0;
       utter.pitch = 1.0;
-      var voices = window.speechSynthesis.getVoices();
-      if (targetLang === "en") {
-        var enVoice = voices.find(function (v) { return /^(en-US|en_US|en-GB|en_)/i.test(v.lang || ""); });
-        if (enVoice) utter.voice = enVoice;
+      if (voice) {
+        utter.voice = voice;
+        utter.lang = voice.lang;
       } else {
-        var esVoice = voices.find(function (v) { return /^(es-ES|es-MX|es_)/i.test(v.lang || ""); });
-        if (esVoice) utter.voice = esVoice;
+        utter.lang = targetLang === "en" ? "en-US" : "es-ES";
       }
+      if (source === "dock") {
+        isDockSpeaking = true;
+        utter.onend = function () { isDockSpeaking = false; };
+        utter.onerror = function () { isDockSpeaking = false; };
+      }
+      currentUtterance = utter;
       window.speechSynthesis.speak(utter);
     } catch (e) {}
   }
@@ -699,7 +732,7 @@
       analysisPanel.classList.remove("hidden");
     }
     if (msg.risk !== "HIGH" && msg.risk !== "CRITICAL") return;
-    speakAlexa(msg.announcement || "Movimiento detectado en el acceso", "es");
+    speakAlexa(msg.announcement || (currentLang === "en" ? "Motion detected" : "Movimiento detectado en el acceso"), currentLang, "alert");
   }
 
   function clock() {
@@ -802,6 +835,7 @@
     camLive = live;
     camStatus = status;
     applyCameraMode();
+    if (currentCam === "real" || currentCam === "phone") refreshLiveSnapshot();
     try {
       var stateResp = await fetch(base + "/state");
       if (stateResp.status === 200) renderWatchState(await stateResp.json());
@@ -810,7 +844,7 @@
 
   function refreshLiveSnapshot() {
     if (currentCam !== "real" && currentCam !== "phone") return;
-    if (!camLive) return;
+    if (!camLive && currentCam !== "phone") return;
     document.getElementById("cam-live").src = camApiPath() + "/snapshot?t=" + Date.now();
   }
 
@@ -893,7 +927,10 @@
       document.getElementById(id).style.display = "none";
     });
     cycleDetections();
+    camLive = true;
+    camStatus = "online";
     applyCameraMode();
+    refreshLiveSnapshot();
   }
 
   ["living", "kitchen", "patio"].forEach(function (t) {
@@ -1025,7 +1062,7 @@
       text.textContent = answer;
       box.classList.remove("hidden");
       statusEl.textContent = "Status: Ready · Click mic or type question";
-      speakAlexa(answer, currentLang);
+      speakAlexa(answer, currentLang, "dock");
     } catch (e) {
       statusEl.textContent = "Status: Error querying memory service.";
     }
@@ -1063,6 +1100,9 @@
       textInput.placeholder = currentLang === "es"
         ? "Pregunta a Alexa sobre el historial o estado..."
         : "Ask Alexa a question about history or status...";
+    }
+    if (recognition) {
+      recognition.lang = currentLang === "en" ? "en-US" : "es-ES";
     }
   });
 

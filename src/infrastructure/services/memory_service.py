@@ -113,6 +113,21 @@ class VectorMemoryService:
         self._vectors[record.id] = embed_text(" ".join(sources))
         return record
 
+    @staticmethod
+    def _norm_location(value: str | None) -> str | None:
+        if value is None:
+            return None
+        import unicodedata
+
+        return (
+            "".join(
+                c
+                for c in unicodedata.normalize("NFD", value)
+                if unicodedata.category(c) != "Mn"
+            )
+            .lower()
+        )
+
     def search_memory(
         self,
         query: str,
@@ -124,16 +139,26 @@ class VectorMemoryService:
     ) -> list[tuple[MemoryRecord, float]]:
         """Return the top-k relevant memories, nearest semantic match first."""
         query_vector = embed_text(query)
+        target_loc = self._norm_location(location)
         scored: list[tuple[MemoryRecord, float]] = []
         for record_id, vector in self._vectors.items():
             record = self._records[record_id]
-            if location is not None and record.location != location:
+            if target_loc is not None and self._norm_location(record.location) != target_loc:
                 continue
             if risk is not None and record.risk != risk:
                 continue
             score = _cosine_similarity(query_vector, vector)
             if score >= min_score:
                 scored.append((record, round(score, 4)))
+        if not scored and target_loc is not None:
+            # Fallback: if location filter yields nothing, search without it
+            for record_id, vector in self._vectors.items():
+                record = self._records[record_id]
+                if risk is not None and record.risk != risk:
+                    continue
+                score = _cosine_similarity(query_vector, vector)
+                if score >= min_score:
+                    scored.append((record, round(score, 4)))
         scored.sort(key=lambda pair: (-pair[1], -pair[0].timestamp))
         return scored[:limit]
 
@@ -153,12 +178,13 @@ class VectorMemoryService:
         timeline.
         """
         normalized_risk = risk.upper() if risk else None
+        target_loc = self._norm_location(location)
         windowed = [
             record
             for record in self._records.values()
             if (since is None or record.timestamp >= since)
             and (until is None or record.timestamp <= until)
-            and (location is None or record.location == location)
+            and (target_loc is None or self._norm_location(record.location) == target_loc)
             and (normalized_risk is None or record.risk.upper() == normalized_risk)
         ]
         windowed.sort(key=lambda record: (record.timestamp, record.id))
@@ -177,10 +203,11 @@ class VectorMemoryService:
         (for example ``GATE_OPEN``, ``PET`` or ``PERSON_ELDERLY``).
         """
         latest: MemoryRecord | None = None
+        target_loc = self._norm_location(location)
         for record in self._records.values():
             if label is not None and not _record_has_label(record, label):
                 continue
-            if location is not None and record.location != location:
+            if target_loc is not None and self._norm_location(record.location) != target_loc:
                 continue
             if source is not None and record.source != source:
                 continue

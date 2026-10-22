@@ -282,6 +282,35 @@ MEMORY_CONVERSE = AgentTool(
     ),
 )
 
+MEMORY_RECALL = AgentTool(
+    name="memory_recall",
+    description=(
+        "Experimental parallel recall channel: interpret a natural-language "
+        "question about the home's history, plan the retrieval, run it over "
+        "local memory and answer strictly from the evidence that was actually "
+        "retrieved, exposing that evidence and the executed trace. "
+        "Deterministic, never uses an LLM, and never replaces memory_converse."
+    ),
+    category=ToolCategory.KNOWLEDGE,
+    input_schema=_schema(
+        required=["query"],
+        properties={
+            "query": {
+                "type": "string",
+                "description": "Natural-language question in Spanish or English.",
+            },
+            "lang": {
+                "type": "string",
+                "description": "Optional answer language: es or en.",
+            },
+            "now": {
+                "type": "number",
+                "description": "Optional epoch seconds used as the recall anchor.",
+            },
+        },
+    ),
+)
+
 AGENTIC_TOOL_CATALOG: tuple[AgentTool, ...] = (
     ANALYZE_IMAGE_CONTEXT,
     SUMMARIZE_DOCUMENT,
@@ -291,4 +320,5 @@ AGENTIC_TOOL_CATALOG: tuple[AgentTool, ...] = (
     MEMORY_SEARCH,
     MEMORY_SUMMARY,
     MEMORY_CONVERSE,
+    MEMORY_RECALL,
 )
