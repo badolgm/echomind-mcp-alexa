@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="./hero.svg" alt="EchoMind V2 — one question, one of two truth sources, one honest answer" width="100%"/>
+<a href="./hackathon-banner.svg">
+  <img src="./hackathon-banner.svg" alt="EchoMind, Memory-First AI for Alexa+. Built for the Amazon Developer Hackathon 2026: Build, Ship, Shape." width="100%"/>
+</a>
 
 # EchoMind
 
@@ -8,19 +10,43 @@
 
 **Observe → Remember → Recall → Relate → Reason → Respond**
 
-[![Track](https://img.shields.io/badge/Track-Alexa%2B-00caff)](#9-alexa-integration)
-[![Mini Challenge](https://img.shields.io/badge/Mini%20Challenge-AWS%20Builder-ff9900)](#10-aws-builder-integration)
-[![Protocol](https://img.shields.io/badge/MCP-Streamable%20HTTP-7c3aed)](#9-alexa-integration)
-[![Architecture](https://img.shields.io/badge/Architecture-Hexagonal%20%2B%20DDD-0ea5e9)](#5-system-architecture)
-[![License](https://img.shields.io/badge/License-MIT-green)](#15-license)
+[![Track](https://img.shields.io/badge/Track-Alexa%2B-00caff)](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-overview.html)
+[![Mini Challenge](https://img.shields.io/badge/Mini%20Challenge-AWS%20Builder-ff9900)](https://builder.aws.com/content/3JP06xAFFqTUXpD9kECgYcjVHWQ/aws-hackathons-still-open-build-compete-and-ship-before-october-ends)
+[![Hackathon](https://img.shields.io/badge/Hackathon-Build%2C%20Ship%2C%20Shape%202026-ff6f00)](https://amazonappdev2026.devpost.com/)
+[![Protocol](https://img.shields.io/badge/MCP-Streamable%20HTTP-7c3aed)](#10-alexa-integration)
+[![Architecture](https://img.shields.io/badge/Architecture-Hexagonal%20%2B%20DDD-0ea5e9)](#6-system-architecture)
+[![License](https://img.shields.io/badge/License-MIT-green)](#18-license)
 
 *Memory-first home ecosystem · deterministic · bilingual · 24/7 without AWS*
 
+**[Judge Quick Start](#2-judge-quick-start)** · [Architecture](#6-system-architecture) · [Known Limitations](#15-known-limitations) · [Documentation](#17-project-documentation)
+
 </div>
+
+## Contents
+
+| | |
+| --- | --- |
+| **Start here** | [1. Overview](#1-overview) · [2. Judge Quick Start](#2-judge-quick-start) |
+| **Understand** | [3. What is EchoMind](#3-what-is-echomind) · [4. Why it is different](#4-why-echomind-is-different) · [5. Core capabilities](#5-core-capabilities) |
+| **Architecture** | [6. System architecture](#6-system-architecture) · [7. Memory reasoning pipeline](#7-memory-reasoning-pipeline) · [8. Query router](#8-query-router) · [9. Domain model](#9-domain-model) |
+| **Integrations** | [10. Alexa+](#10-alexa-integration) · [11. AWS Builder](#11-aws-builder-integration) |
+| **Run it** | [12. Getting started](#12-getting-started) · [13. Testing](#13-testing) |
+| **Project** | [14. Status](#14-project-status) · [15. Known limitations](#15-known-limitations) · [16. Roadmap](#16-roadmap) · [17. Project documentation](#17-project-documentation) · [18. License](#18-license) |
+| **Diagrams** | [Overview](#1-overview) · [System architecture](#6-system-architecture) · [Memory reasoning](#7-memory-reasoning-pipeline) · [Query router](#8-query-router) · [Domain model](#9-domain-model) |
+
+> **Judges, 2-minute path:** [Overview](#1-overview) → [Query router](#8-query-router) → [Where Bedrock is, and is not](#11-aws-builder-integration) → [Judge Quick Start](#2-judge-quick-start) → [Known limitations](#15-known-limitations)
 
 ---
 
-## 1. Hero
+## 1. Overview
+
+<p align="center">
+  <a href="./hero.svg">
+    <img src="./hero.svg" alt="EchoMind V2 — one question, one of two truth sources, one honest answer" width="100%"/>
+  </a>
+  <br/><sub>Click to open full size</sub>
+</p>
 
 > **One question → one of two truth sources → one honest answer.**
 
@@ -34,7 +60,84 @@ runs out of quota, Alexa+ keeps remembering and answering.
 
 ---
 
-## 2. What is EchoMind
+## 2. Judge Quick Start
+
+> **Five minutes. No AWS credentials, no camera and no Alexa device needed.** The memory path is local and deterministic, so nothing below calls a cloud service.
+
+| Time | Step | What it shows |
+| ---- | ---- | ------------- |
+| 0:00 | **Read** the [overview diagram](#1-overview) and the [router precedence table](#8-query-router) | Every question leaves as exactly one of two domains: `CURRENT_STATE` or `RECALL` |
+| 1:00 | **Start** the server, Docker or local ([Getting Started](#12-getting-started)) | It boots with no AWS credentials |
+| 2:00 | **Ask before seeding** | With an empty memory the system abstains instead of guessing |
+| 2:30 | **Seed** the demo memory and **ask again** | The answer, its `evidence` and its `trace` come back together |
+| 3:30 | **Ask a present-tense question** | It is answered from the live snapshot, not from memory |
+| 4:15 | **Check** `/metrics` and run the offline test suite | Tool counts and quota-fallback activations are observable; tests need no network |
+
+**1. Start**
+
+```bash
+docker compose up --build -d      # or follow steps 1-3 of Getting Started
+curl http://localhost:8000/health
+```
+
+**2. Ask before seeding.** Define a helper once, then ask a past-tense question:
+
+```bash
+# bash / zsh / Git Bash
+ask() { curl -s -X POST http://localhost:8000/api/recall -H "Content-Type: application/json" -d "{\"query\": \"$1\"}"; echo; }
+ask "¿Cuándo viste a alguien por última vez?"
+```
+
+```powershell
+# PowerShell
+function Ask($q) { Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/recall -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes((@{ query = $q } | ConvertTo-Json))) }
+Ask "¿Cuándo viste a alguien por última vez?"
+```
+
+**3. Seed, then ask again**
+
+```bash
+curl -X POST http://localhost:8000/api/demo/seed
+ask "¿Cuándo viste a alguien por última vez?"
+```
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/demo/seed
+Ask "¿Cuándo viste a alguien por última vez?"
+```
+
+**4. Present tense, and English**
+
+```bash
+ask "¿La reja está cerrada?"
+ask "How many events today?"
+```
+
+**5. Observe and verify**
+
+```bash
+curl http://localhost:8000/metrics
+pytest -q
+```
+
+**What to look for**
+
+- **Before seeding:** `response` is an abstention and `evidence` is empty.
+- **After seeding:** the JSON carries `response` (the answer), `evidence` (the retrieved records) and `trace` (the plan and the operations executed).
+- **Present tense:** *"¿La reja está cerrada?"* is routed to `CURRENT_STATE` and answered from the live snapshot, or with an honest *"No dispongo…"* if that field is missing ([Query Router](#8-query-router)).
+- **Determinism:** the same question over the same memory returns the same answer. Relative phrases such as *"hace 2 horas"* advance with the clock.
+- **No cloud on the memory path:** Bedrock appears only under the multimodal and ambient tools ([Where Bedrock is, and is not](#11-aws-builder-integration)).
+
+Next: [Known Limitations](#15-known-limitations) · [Project Documentation](#17-project-documentation)
+
+<!-- RC-VERIFY before publishing (delete this comment afterwards):
+     1. HTTP method of /api/demo/seed in src/main.py (POST assumed above).
+     2. That /api/recall routes present-tense questions through route_query with the live-state provider wired.
+     3. That `scripts/` is tracked (see Getting Started) and LICENSE exists. -->
+
+---
+
+## 3. What is EchoMind
 
 EchoMind gives **Alexa+** a memory of the home. It watches through cameras and sensors, remembers
 what mattered, and reasons over that memory to answer natural-language questions in Spanish and
@@ -64,7 +167,7 @@ Observe  →  Remember  →  Recall  →  Relate  →  Reason  →  Respond
 
 ---
 
-## 3. Why EchoMind is different
+## 4. Why EchoMind is different
 
 | | CCTV / NVR | Dashboards | Motion detectors | Chatbots | **EchoMind** |
 | - | :-: | :-: | :-: | :-: | :-: |
@@ -93,7 +196,7 @@ Observe  →  Remember  →  Recall  →  Relate  →  Reason  →  Respond
 
 ---
 
-## 4. Core Capabilities
+## 5. Core Capabilities
 
 | Capability | What it does | Source of truth |
 | ---------- | ------------ | --------------- |
@@ -115,10 +218,13 @@ Observe  →  Remember  →  Recall  →  Relate  →  Reason  →  Respond
 
 ---
 
-## 5. System Architecture
+## 6. System Architecture
 
 <p align="center">
-  <img src="./system-architecture.svg" alt="EchoMind V2 system architecture, hexagonal layers from devices to outputs" width="100%"/>
+  <a href="./system-architecture.svg">
+    <img src="./system-architecture.svg" alt="EchoMind V2 system architecture, hexagonal layers from devices to outputs" width="100%"/>
+  </a>
+  <br/><sub>Click to open full size</sub>
 </p>
 
 All business rules live in a pure domain. Adapters own every side effect. `src/main.py:compose()` is
@@ -155,10 +261,13 @@ Query flow
 
 ---
 
-## 6. Memory Reasoning Pipeline
+## 7. Memory Reasoning Pipeline
 
 <p align="center">
-  <img src="./memory-reasoning.svg" alt="EchoMind recall pipeline: understand, plan, retrieve, relate, narrate, synthesize, result" width="100%"/>
+  <a href="./memory-reasoning.svg">
+    <img src="./memory-reasoning.svg" alt="EchoMind recall pipeline: understand, plan, retrieve, relate, narrate, synthesize, result" width="100%"/>
+  </a>
+  <br/><sub>Click to open full size</sub>
 </p>
 
 `data → relations → context → narration → synthesis`. Every step builds an auditable structure and
@@ -189,14 +298,17 @@ every claim is a retrieved fact.
 
 `/api/recall` exposes the utterance, the evidence and the trace together.
 
-> Deep dive: `ECHOMIND_V2_MEMORY_FIRST_ARCHITECTURE.md`
+> Deep dive: [`ECHOMIND_V2_MEMORY_FIRST_ARCHITECTURE.md`](ECHOMIND_V2_MEMORY_FIRST_ARCHITECTURE.md) (Spanish)
 
 ---
 
-## 7. Query Router
+## 8. Query Router
 
 <p align="center">
-  <img src="./query-router.svg" alt="EchoMind A7C query router: precedence table and the CURRENT_STATE versus RECALL branches" width="100%"/>
+  <a href="./query-router.svg">
+    <img src="./query-router.svg" alt="EchoMind A7C query router: precedence table and the CURRENT_STATE versus RECALL branches" width="100%"/>
+  </a>
+  <br/><sub>Click to open full size</sub>
 </p>
 
 Every question leaves as **exactly one of two domains**. `route_query(text, lang?)` is a pure
@@ -233,14 +345,17 @@ never `MOTION`.
 encontrado recuerdos…"*, the wrong truth source. Now subject `reja` + present marker `cerrada` +
 polarity `closed` → `CURRENT_STATE` → `render_state_answer` → a live, honest answer.
 
-> Deep dive: `A7C_QUERY_ROUTER_ARCHITECTURE.md`
+> Deep dive: [`A7C_QUERY_ROUTER_ARCHITECTURE.md`](A7C_QUERY_ROUTER_ARCHITECTURE.md) (Spanish)
 
 ---
 
-## 8. Domain Model
+## 9. Domain Model
 
 <p align="center">
-  <img src="./domain-erd.svg" alt="EchoMind V2 domain entity-relationship diagram for the memory reasoning pipeline" width="100%"/>
+  <a href="./domain-erd.svg">
+    <img src="./domain-erd.svg" alt="EchoMind V2 domain entity-relationship diagram for the memory reasoning pipeline" width="100%"/>
+  </a>
+  <br/><sub>Click to open full size</sub>
 </p>
 
 Pure domain structures behind the pipeline. `MemoryRecord` lives in infrastructure but is the source
@@ -279,7 +394,7 @@ record for everything else.
 
 ---
 
-## 9. Alexa+ Integration
+## 10. Alexa+ Integration
 
 Alexa+ talks to EchoMind as an **MCP client** over the HTTP **Streamable** transport (spec
 `2025-11-25`).
@@ -311,7 +426,7 @@ collar), computes an explainable risk verdict, and publishes `camera_alert` even
 
 ---
 
-## 10. AWS Builder Integration
+## 11. AWS Builder Integration
 
 AWS Bedrock is the LLM provider for the **multimodal and ambient tools**. It is deliberately **not
 in the memory path**, so memory answers never depend on a cloud call.
@@ -337,7 +452,7 @@ in the memory path**, so memory answers never depend on a cloud call.
 
 ---
 
-## 11. Getting Started
+## 12. Getting Started
 
 ```powershell
 # 1. Create and activate a virtual environment
@@ -379,20 +494,20 @@ Web Speech API.
 
 **Drive it like Alexa+**
 
-Maintainer scripts in the git-ignored `.local/scripts/` emulate Alexa+ (session negotiation, SSE
+Scripts in `scripts/` emulate Alexa+ (session negotiation, SSE
 listener, JSON-RPC tool calls, base64 attachments):
 
 ```powershell
 # One-shot ambient analysis
-python .local/scripts/alexa_mcp_simulator.py --server http://localhost:8000 `
+python scripts/alexa_mcp_simulator.py --server http://localhost:8000 `
     --tool analyze_ambient_stream `
     --arguments '{"location":"kitchen","observation":"smoke coming from the oven"}'
 
 # Interactive REPL (list / call / session / quit)
-python .local/scripts/alexa_mcp_simulator.py --server http://localhost:8000 --interactive
+python scripts/alexa_mcp_simulator.py --server http://localhost:8000 --interactive
 
 # One-command demo: replays ambient events and prints the telemetry report
-python .local/scripts/run_demo.py
+python scripts/run_demo.py
 ```
 
 **Configuration (environment variables)**
@@ -412,7 +527,7 @@ python .local/scripts/run_demo.py
 
 ---
 
-## 12. Testing
+## 13. Testing
 
 The whole suite runs **offline**: unit and integration tests use mocked ports, with no network and
 no AWS credentials.
@@ -431,7 +546,7 @@ tests/
 
 ---
 
-## 13. Project Status
+## 14. Project Status
 
 | Area | Status |
 | ---- | ------ |
@@ -449,7 +564,50 @@ tests/
 
 ---
 
-## 14. Roadmap
+## 15. Known Limitations
+
+Stated plainly, so nobody has to discover them. Every row comes from the project's own reports or from this README; the **Source** column says where. Rows marked *as of Ax* reflect that implementation report and should be re-checked against the current code.
+
+**Memory and data**
+
+| Area | Limitation | Source |
+| ---- | ---------- | ------ |
+| **Store** | Memory lives in an in-process `VectorMemoryService`. A Qdrant Edge adapter is specified behind `MemoryVectorStorePort` but not implemented, so confirm what survives a restart before relying on it | [V2 architecture §1.2, §13](ECHOMIND_V2_MEMORY_FIRST_ARCHITECTURE.md) |
+| **Embeddings** | Hashed term-frequency vectors (256-D, L2-normalised, cosine). Deterministic and offline, not a neural semantic embedding. Most recall operations (`range`, `last_seen`, counts) filter by field, not by vector | [V2 architecture §1.2, §5.3](ECHOMIND_V2_MEMORY_FIRST_ARCHITECTURE.md) |
+| **What is remembered** | Only HIGH / CRITICAL events are persisted by `MemoryBridge`. Low-risk activity is not recorded | [Core capabilities](#5-core-capabilities) |
+| **Sensors** | Ambient values come from `SimulatedSensorBus` (deterministic baseline); the Android and Vivotek cameras are real adapters. Treat gate, door, smoke and temperature as demo signals unless real devices are wired in | [V2 architecture §1.2](ECHOMIND_V2_MEMORY_FIRST_ARCHITECTURE.md) |
+| **Spatial identity** | `camera_id` and `zone` are optional record metadata. Without them identity degrades to `source` and `location`, and the trace says so. When the A5 report was written the watchdog did not yet publish them, so live spatial answers are location-level | [A4 §8](A4_IMPLEMENTATION_REPORT.md) · [A5 §10](A5_IMPLEMENTATION_REPORT.md) |
+
+**Reasoning and answers**
+
+| Area | Limitation | Source |
+| ---- | ---------- | ------ |
+| **Relations** | 12 relation kinds are defined and 6 rules are active. `spatial.same_camera` and `temporal.gap` are deferred; the remaining kinds have no rule yet | [A6d §4](A6d_IMPLEMENTATION_REPORT.md) |
+| **Relation cap** | The graph is capped at 64 relations ordered by kind, subject and object, so a high-salience `temporal_transition` can be cut before narration | [A6G](A6G_MEMORY_EXPERIENCE_REVIEW.md) · [Validation G5](MEMORY_EXPERIENCE_VALIDATION.md) |
+| **Narration** | Only `temporal_transition` and `correlation_overlapping` are spoken, at most 3 sentences. Episodes are built from time-ordered records and cannot overlap, so simultaneity is narrated as "same instant", never as a duration | [A6f §5](A6f_IMPLEMENTATION_REPORT.md) |
+| **Time window** | The `SEARCH` operation scans the whole store; it does not honour the plan's time window | [A3 §7](A3_IMPLEMENTATION_REPORT.md) |
+| **Before / after** | The anchor episode can still appear in the "before" list because `episodes_before` is inclusive; excluding it was deferred | [A6c §7.3](A6a_A6b_A6c_IMPLEMENTATION_REPORT.md) |
+| **Risk filter** | *"¿Cuántos eventos de riesgo…?"* counts all events; "de riesgo" is not extracted as a risk filter (as of A7B) | [A7B final §7](A7B_IMPLEMENTATION_REPORT_FINAL.md) |
+| **Router coverage** | Routing uses marker tables. Phrasing outside them takes the safe default, `RECALL`, so it is answered from memory and never from the live snapshot | [Query router](#8-query-router) |
+| **No dialogue state** | Each question is answered independently; there is no dialogue memory between questions. The `session_start` anchor is passed per request | [V2 architecture §2.2](ECHOMIND_V2_MEMORY_FIRST_ARCHITECTURE.md) · [A3 §7](A3_IMPLEMENTATION_REPORT.md) |
+
+**Integrations and operations**
+
+| Area | Limitation | Source |
+| ---- | ---------- | ------ |
+| **MCP `session_start`** | `/api/recall` accepts `session_start`; the MCP `memory_recall` tool does not expose it (as of A7B), so "while I was away" is session-anchored over HTTP only | [Validation G3](MEMORY_EXPERIENCE_VALIDATION.md) · [A7B final §7](A7B_IMPLEMENTATION_REPORT_FINAL.md) |
+| **MCP text** | The MCP text rendering does not surface `context_response` separately. It is in the JSON payload and is folded into `response` for timeline and correlation answers | [Validation §2](MEMORY_EXPERIENCE_VALIDATION.md) · [A7B final §7](A7B_IMPLEMENTATION_REPORT_FINAL.md) |
+| **Reaching Alexa+** | Alexa+ is an MCP client that connects to a server through an Alexa+ MCP add-on registered with the server's URL ([Amazon MCP Toolkit](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-overview.html)), so a server on `localhost:8000` is not reachable by Alexa+ on its own. Real-device validation is not documented here; the MCP simulator in `scripts/` is the reproducible path | [Amazon docs](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-overview.html) · [README audit M9](README_FINAL_AUDIT.md) |
+| **Multimodal model** | The default `amazon.nova-micro-v1:0` is documented by AWS as text-only ([model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-micro.html)). Image, video and audio analysis need a multimodal model set through `ECHOMIND_BEDROCK_MODEL_ID`; check `fallbacks_activated` in `/metrics` after an image call | [README audit M5](README_FINAL_AUDIT.md) |
+| **Voice in the console** | The Control Center speaks through the browser's Web Speech API, in Spanish only. It is a console feature, not Alexa+ voice output | [Getting started](#12-getting-started) |
+| **Vivotek feed** | Frames are snapshot polling through the backend proxy; continuous video is on the [roadmap](#16-roadmap). The default camera host `192.168.40.10` is a private LAN address | [Getting started](#12-getting-started) |
+| **Security** | `/mcp` and `/api/*` bind to `0.0.0.0` by default and no authentication is documented. Run on a trusted network | [Getting started](#12-getting-started) · [README audit R7](README_FINAL_AUDIT.md) |
+| **Layering** | `MemoryRecord`, `Episode` and `TimelineGap` live in infrastructure modules; the pure domain consumes them by duck typing (`Evidence.from_record`, `AnchorRef`) rather than by import | [A4](A4_IMPLEMENTATION_REPORT.md) · [A6c](A6a_A6b_A6c_IMPLEMENTATION_REPORT.md) · [Domain model](#9-domain-model) |
+| **Documentation language** | The deep-dive documents and most implementation reports are in Spanish; this README, the validation and the audit are in English | [Project documentation](#17-project-documentation) |
+
+---
+
+## 16. Roadmap
 
 - [x] **Phases 1–8:** domain core, multimodal MCP tools, sessions and SSE, ambient awareness and
   Quota Fallback, Alexa+ manifest and observability, Control Center, Vivotek integration,
@@ -463,12 +621,75 @@ tests/
 
 ---
 
-## 15. License
+## 17. Project Documentation
+
+Everything the README summarises is backed by a document in this repository. **ES** = Spanish, **EN** = English.
+
+### Architecture
+
+| Document | Covers | Lang |
+| -------- | ------ | :--: |
+| [`ECHOMIND_V2_MEMORY_FIRST_ARCHITECTURE.md`](ECHOMIND_V2_MEMORY_FIRST_ARCHITECTURE.md) | V2 design: as-is audit, recall engine, spatial memory, timeline, evidence-first, phases | ES |
+| [`A6_CONTEXTUAL_REASONING_ARCHITECTURE.md`](A6_CONTEXTUAL_REASONING_ARCHITECTURE.md) | A6 design: relation graph, context and narration without an LLM | ES |
+| [`A7C_QUERY_ROUTER_ARCHITECTURE.md`](A7C_QUERY_ROUTER_ARCHITECTURE.md) | A7C design: present versus past routing and current-state reasoning | ES |
+
+**Diagrams**
+
+| Diagram | Shows | In README |
+| ------- | ----- | --------- |
+| [`hackathon-banner.svg`](hackathon-banner.svg) | Cover | top |
+| [`hero.svg`](hero.svg) | One question, one of two truth sources, one honest answer | [Overview](#1-overview) |
+| [`system-architecture.svg`](system-architecture.svg) | Hexagonal layers, from devices to outputs | [System architecture](#6-system-architecture) |
+| [`memory-reasoning.svg`](memory-reasoning.svg) | Recall pipeline: understand, plan, retrieve, relate, narrate, synthesize | [Memory reasoning](#7-memory-reasoning-pipeline) |
+| [`query-router.svg`](query-router.svg) | A7C precedence table and the two branches | [Query router](#8-query-router) |
+| [`domain-erd.svg`](domain-erd.svg) | Domain entity-relationship diagram | [Domain model](#9-domain-model) |
+
+### Validation
+
+| Document | Covers | Lang |
+| -------- | ------ | :--: |
+| [`MEMORY_EXPERIENCE_VALIDATION.md`](MEMORY_EXPERIENCE_VALIDATION.md) | Read-only check of six memory experiences on a 12-record household fixture, with the gaps found | EN |
+| [`A6G_MEMORY_EXPERIENCE_REVIEW.md`](A6G_MEMORY_EXPERIENCE_REVIEW.md) | Which real memory experiences are possible today | ES |
+| [`README_FINAL_AUDIT.md`](README_FINAL_AUDIT.md) | Pre-publication audit of this README and its diagrams | EN |
+
+### Implementation Reports
+
+| Phase | Scope | Report | Lang |
+| ----- | ----- | ------ | :--: |
+| A1 | Recall engine core: plan, evidence, planner | [A1](A1_IMPLEMENTATION_REPORT.md) | ES |
+| A2 | Retrieve and relate: `records_between`, timeline, engine | [A2](A2_IMPLEMENTATION_REPORT.md) | ES |
+| A3 | Parallel channel: `memory_recall` tool and `/api/recall` | [A3](A3_IMPLEMENTATION_REPORT.md) | ES |
+| A4 | Spatial metadata: `camera_id` and `zone` on `MemoryRecord` | [A4](A4_IMPLEMENTATION_REPORT.md) | ES |
+| A5 | Spatial reasoning with explicit degradation | [A5](A5_IMPLEMENTATION_REPORT.md) | ES |
+| A6a–c | Relation foundation, temporal symmetry, event anchoring | [A6a–c](A6a_A6b_A6c_IMPLEMENTATION_REPORT.md) | ES |
+| A6d | Relation engine | [A6d](A6d_IMPLEMENTATION_REPORT.md) | ES |
+| A6e | Structured context and salience | [A6e](A6e_IMPLEMENTATION_REPORT.md) | ES |
+| A6f | Contextual narration | [A6f](A6f_IMPLEMENTATION_REPORT.md) | ES |
+| A7 | Plan and engine closure: anchor inference, vocabulary | [A7](A7_IMPLEMENTATION_REPORT.md) | EN |
+| A7B | Question-directed synthesis | [Assessment](A7B_IMPLEMENTATION_REPORT.md) · [Final](A7B_IMPLEMENTATION_REPORT_FINAL.md) | EN · ES |
+| A7C | Query router and current-state reasoning | [Design](A7C_QUERY_ROUTER_ARCHITECTURE.md) | ES |
+| A7D | Response intent and intent-driven synthesis | Summarised in [Memory reasoning](#7-memory-reasoning-pipeline) | |
+
+### Hackathon Material
+
+| Resource | Purpose |
+| -------- | ------- |
+| [Build, Ship, Shape: Amazon Developer Hackathon 2026](https://amazonappdev2026.devpost.com/) | The hackathon (Devpost) |
+| [Alexa+ MCP Toolkit overview](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-overview.html) | How Alexa+ connects to an MCP server |
+| [AWS Builder Mini Challenge](https://builder.aws.com/content/3JP06xAFFqTUXpD9kECgYcjVHWQ/aws-hackathons-still-open-build-compete-and-ship-before-october-ends) | The mini challenge EchoMind enters |
+| [`DEMO_FLOW.md`](DEMO_FLOW.md) | Demo script |
+| [`JUDGE_QUICK_START.md`](JUDGE_QUICK_START.md) | Extended judge guide (the short version is [section 2](#2-judge-quick-start)) |
+| [`HACKATHON_READINESS_REPORT.md`](HACKATHON_READINESS_REPORT.md) | Readiness report |
+| [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md) | Extended limitations (the short version is [section 15](#15-known-limitations)) |
+
+---
+
+## 18. License
 
 MIT License © 2026 Bernardo Adolfo Gómez Montoya (Badolgm). See [LICENSE](LICENSE).
 
 <div align="center">
 
-**EchoMind** · Memory-First AI for Alexa +  *Observe → Remember → Recall → Relate → Reason → Respond*
+**EchoMind** · Memory-First AI for Alexa+  ·  *Observe → Remember → Recall → Relate → Reason → Respond*
 
 </div>
