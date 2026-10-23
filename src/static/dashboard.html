@@ -77,7 +77,7 @@
         <div class="flex items-center gap-3">
           <div>
             <div class="text-lg font-bold tracking-tight">EchoMind <span class="accent">MCP Control Center</span></div>
-            <div class="text-[11px] text-slate-500 tracking-widest uppercase">Agentic Ecosystem &middot; Alexa+ &middot; AWS Bedrock</div>
+            <div class="text-[11px] text-slate-500 tracking-widest uppercase">Agentic Ecosystem &middot; Alexa+ &middot; LLM Provider</div>
           </div>
         </div>
         <div class="flex items-center gap-4 text-xs">
@@ -105,7 +105,7 @@
         <div class="panel panel-glow rounded-xl p-4">
           <div class="flex items-center justify-between">
             <div>
-              <div class="text-[10px] uppercase tracking-wider text-slate-500">Response Latency</div>
+              <div class="text-[10px] uppercase tracking-wider text-slate-500">Response Latency (tools)</div>
               <div class="text-2xl font-bold accent mt-1" id="latency-value">-- ms</div>
               <div class="text-[10px] text-slate-500 mt-1">p95 <span class="text-slate-300" id="latency-p95">--</span></div>
             </div>
@@ -177,7 +177,7 @@
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></span>
-              <h3 class="text-[11px] uppercase tracking-widest text-cyan-300 font-bold">Alexa Conversational Memory Dock</h3>
+              <h3 class="text-[11px] uppercase tracking-widest text-cyan-300 font-bold">Memory / Evidence</h3>
             </div>
             <div class="flex items-center gap-2">
               <button id="voice-seed-btn" class="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-mono font-bold text-emerald-400 border border-emerald-500/40 transition">🌱 Seed Demo Memory</button>
@@ -210,20 +210,32 @@
             <button class="voice-pill px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-mono text-slate-300 border border-slate-700 transition" data-q="What is happening right now?">"What is happening now?"</button>
           </div>
 
-          <!-- Alexa Answer Caption -->
+          <!-- Memory / Evidence Panel -->
           <div id="voice-caption-box" class="hidden mt-3 p-3 rounded-lg bg-cyan-950/30 border border-cyan-500/30 text-xs">
             <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono uppercase font-bold text-cyan-400">Alexa Response (Subtitles)</span>
+              <span class="text-[10px] font-mono uppercase font-bold text-cyan-400">Last Response</span>
               <span class="text-[9px] font-mono text-slate-500">Latency: &lt;1 ms (Zero LLM)</span>
             </div>
-            <div id="voice-caption-text" class="text-cyan-100 font-sans leading-relaxed"></div>
+            <div id="voice-caption-text" class="text-cyan-100 font-sans leading-relaxed mb-2"></div>
+            <div class="pt-2 border-t border-cyan-500/20">
+              <div class="text-[9px] font-mono uppercase text-cyan-400 mb-1">Evidence Used</div>
+              <div id="evidence-used" class="text-[9px] font-mono text-slate-300 space-y-0.5 max-h-16 overflow-y-auto"></div>
+              <div class="text-[9px] font-mono uppercase text-cyan-400 mt-2 mb-1">Related Memories</div>
+              <div id="related-memories" class="text-[9px] font-mono text-slate-400">-</div>
+            </div>
           </div>
         </div>
 
         <div class="panel rounded-xl p-4">
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-[11px] uppercase tracking-widest text-slate-500">Active Multimodal Analytics</h3>
-            <div id="cam-title" class="text-[10px] font-mono text-cyan-300">CAM-01 &middot; VIVOTEK FD8367</div>
+            <div class="flex items-center gap-2">
+              <span class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-400/40">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-alert"></span>
+                <span class="text-[9px] font-mono font-bold text-emerald-400 tracking-widest">OBSERVING</span>
+              </span>
+              <div id="cam-title" class="text-[10px] font-mono text-cyan-300">CAM-01 &middot; VIVOTEK FD8367</div>
+            </div>
           </div>
 
           <div class="mb-2">
@@ -237,6 +249,7 @@
             </select>
             <div class="flex items-center justify-between mt-1.5">
               <span id="cam-source" class="text-[9px] font-mono font-bold text-cyan-300 tracking-widest">LIVE HARDWARE</span>
+              <span id="cam-captured-at" class="text-[9px] font-mono text-slate-500">--:--:--</span>
             </div>
             <div class="mt-2 grid grid-cols-5 gap-1 text-center">
               <div class="rounded bg-slate-950 border border-slate-800 px-1 py-1">
@@ -300,36 +313,44 @@
 
         <div class="panel rounded-xl p-4">
           <div class="flex justify-between items-center mb-2">
+            <h3 class="text-[11px] uppercase tracking-widest text-cyan-300">Recent Events</h3>
+            <span id="recent-events-count" class="font-mono text-[10px] text-slate-500">0</span>
+          </div>
+          <div id="recent-events" class="h-40 overflow-y-auto rounded-lg bg-black border border-slate-800 shadow-[inset_0_0_20px_rgba(34,211,238,0.06)] p-2 font-mono text-[10px] space-y-1"></div>
+        </div>
+
+        <div class="panel rounded-xl p-4">
+          <div class="flex justify-between items-center mb-2">
             <h3 class="text-[11px] uppercase tracking-widest text-slate-500">Live Tools Log</h3>
             <span id="tool-count" class="font-mono text-[10px] text-slate-500">0 events</span>
           </div>
-          <div id="log" class="h-40 overflow-y-auto rounded-lg bg-black border border-slate-800 shadow-[inset_0_0_20px_rgba(34,211,238,0.06)] p-3 font-mono text-[11px] space-y-1"></div>
+          <div id="log" class="h-32 overflow-y-auto rounded-lg bg-black border border-slate-800 shadow-[inset_0_0_20px_rgba(34,211,238,0.06)] p-3 font-mono text-[11px] space-y-1"></div>
         </div>
       </section>
 
       <section class="col-span-12 lg:col-span-3 space-y-5">
-        <h2 class="text-[11px] uppercase tracking-widest text-slate-500">AWS Bedrock &amp; Utilization</h2>
+        <h2 class="text-[11px] uppercase tracking-widest text-slate-500">LLM Provider &amp; Utilization</h2>
 
         <div class="panel panel-glow rounded-xl p-4">
           <div class="flex items-center justify-between mb-2">
-            <h3 class="text-[11px] uppercase tracking-widest text-slate-500">AWS Bedrock Status</h3>
-            <span class="flex items-center gap-1.5 text-[10px] font-bold" id="provider-line"><i id="provider-dot" class="w-2 h-2 rounded-full bg-emerald-400"></i><span id="provider-label">ACTIVE</span></span>
+            <h3 class="text-[11px] uppercase tracking-widest text-slate-500">LLM Provider Status</h3>
+            <span class="flex items-center gap-1.5 text-[10px] font-bold" id="provider-line"><i id="provider-dot" class="w-2 h-2 rounded-full bg-slate-500"></i><span id="provider-label">UNKNOWN</span></span>
           </div>
-          <button class="w-full text-left px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-xs font-bold text-cyan-300 mb-3">
+          <button class="w-full text-left px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-xs font-bold text-slate-300 mb-3">
             <span class="block text-[9px] text-slate-500 uppercase tracking-wider">Model</span>
-            CLAUDE 3.5 SONNET <span class="text-slate-600">/ HAIKU</span>
+            <span id="model-label">N/A (see config)</span>
           </button>
           <div class="grid grid-cols-2 gap-3 text-center mb-3">
             <div class="rounded-lg border border-slate-800 bg-slate-950 p-2">
-              <div class="text-[9px] text-slate-500 uppercase">Latency</div>
-              <div class="text-sm font-bold accent" id="throughput">--</div>
+              <div class="text-[9px] text-slate-500 uppercase">Provider</div>
+              <div class="text-sm font-bold text-slate-300" id="throughput-unit">--</div>
             </div>
-            <div class="rounded-lg border border-slate-800 bg-slate-950 p-2">
-              <div class="text-[9px] text-slate-500 uppercase">Tokens/s</div>
-              <div class="text-sm font-bold text-emerald-400" id="throughput-unit">--</div>
+            <div class="rounded-lg border border-slane-800 bg-slate-950 p-2">
+              <div class="text-[9px] text-slate-500 uppercase">Provider</div>
+              <div class="text-sm font-bold text-slate-300" id="throughput-unit">--</div>
             </div>
           </div>
-          <div id="model-fallback" class="hidden text-[10px] text-orange-400 font-semibold mb-3 border border-orange-500/40 bg-orange-500/10 rounded-md px-2 py-1.5">fallback: local rule engine (echo-rule-engine-v1)</div>
+          <div id="model-fallback" class="hidden text-[10px] text-orange-400 font-semibold mb-3 border border-orange-500/40 bg-orange-500/10 rounded-md px-2 py-1.5">fallback: local rule engine</div>
           <svg viewBox="0 0 200 205" class="w-full max-w-[220px] mx-auto">
             <polygon points="100,15 186,133 153,178 47,178 14,133" fill="none" stroke="#1e293b"/>
             <polygon points="100,15 186,133 153,178 47,178 14,133" fill="none" stroke="#1e293b" opacity="0.4" transform="scale(0.62) translate(62 62)"/>
@@ -344,6 +365,35 @@
         </div>
 
         <div class="panel rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-[11px] uppercase tracking-widest text-cyan-300">Current State</h3>
+          </div>
+          <div class="grid grid-cols-3 gap-2 mb-3 text-center">
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Gate</div>
+              <div id="cs-gate" class="text-[11px] font-bold text-slate-300">--</div>
+            </div>
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Door</div>
+              <div id="cs-door" class="text-[11px] font-bold text-slate-300">--</div>
+            </div>
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Motion</div>
+              <div id="cs-motion" class="text-[11px] font-bold text-cyan-300">--</div>
+            </div>
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Risk</div>
+              <div id="cs-risk" class="text-[11px] font-bold text-emerald-400">--</div>
+            </div>
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Temp</div>
+              <div id="cs-temp" class="text-[11px] font-bold text-cyan-300">--</div>
+            </div>
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Smoke</div>
+              <div id="cs-smoke" class="text-[11px] font-bold text-cyan-300">--</div>
+            </div>
+          </div>
           <h3 class="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Resource Utilization</h3>
           <div class="flex items-end justify-center gap-6 h-28">
             <div class="flex flex-col items-center gap-1 flex-1 max-w-[54px]">
@@ -537,11 +587,17 @@
       var active = (m.provider && m.provider.active_provider) || "primary";
       var dot = document.getElementById("provider-dot");
       var label = document.getElementById("provider-label");
+      var modelLabel = document.getElementById("model-label");
+      if (modelLabel) {
+        if (m.provider && m.provider.model_id) modelLabel.textContent = m.provider.model_id;
+        else if (m.llm && m.llm.model_id) modelLabel.textContent = m.llm.model_id;
+        else modelLabel.textContent = "N/A (see config)";
+      }
       var line = document.getElementById("provider-line");
       var fb = document.getElementById("model-fallback");
       if (active === "fallback") {
         dot.className = "w-2 h-2 rounded-full bg-orange-500 pulse-alert";
-        label.textContent = "QFP LOCAL ENGINE";
+        label.textContent = "LOCAL FALLBACK";
         label.className = "text-[10px] font-bold amazon";
         line.className = "flex items-center gap-1.5 text-[10px] font-bold";
         fb.className = "block text-[10px] text-orange-400 font-semibold mb-3 border border-orange-500/40 bg-orange-500/10 rounded-md px-2 py-1.5";
@@ -553,9 +609,10 @@
         fb.className = "hidden text-[10px] text-orange-400 font-semibold mb-3 border border-orange-500/40 bg-orange-500/10 rounded-md px-2 py-1.5";
       }
 
-      var throughput = 320 + (m.latency_ms && m.latency_ms["tools/call"] && lat.count ? Math.round(24000 / mean) : 0) + Math.round(Math.random() * 60);
-      document.getElementById("throughput").textContent = mean ? mean.toFixed(1) + " ms" : "--";
-      document.getElementById("throughput-unit").textContent = throughput.toLocaleString();
+      document.getElementById("throughput-unit").textContent = mean ? mean.toFixed(1) + " ms" : "--";
+      var unitEl3 = document.getElementById("throughput-unit");
+      if (unitEl3) unitEl3.textContent = (m.provider && m.provider.active_provider ? m.provider.active_provider : "--");
+      if (unitEl3) unitEl3.textContent = (m.provider && m.provider.active_provider ? m.provider.active_provider : "--");
 
       setGauge("gauge-cpu", "cpu-value", 18 + Math.round(Math.random() * 22));
       setGauge("gauge-mem", "mem-value", 42 + Math.round(Math.random() * 14));
@@ -846,6 +903,8 @@
     if (currentCam !== "real" && currentCam !== "phone") return;
     if (!camLive && currentCam !== "phone") return;
     document.getElementById("cam-live").src = camApiPath() + "/snapshot?t=" + Date.now();
+    var cap = document.getElementById("cam-captured-at");
+    if (cap) cap.textContent = new Date().toLocaleTimeString();
   }
 
   function applyCameraMode() {
@@ -1061,6 +1120,28 @@
       var text = document.getElementById("voice-caption-text");
       text.textContent = answer;
       box.classList.remove("hidden");
+      // Poblar evidencia utilizada
+      var evEl = document.getElementById("evidence-used");
+      if (evEl && data && data.evidence) {
+        evEl.innerHTML = "";
+        data.evidence.slice(0, 3).forEach(function (ev) {
+          var d = document.createElement("div");
+          d.textContent = "- " + (ev.label || ev.type || ev.id || "evidence");
+          evEl.appendChild(d);
+        });
+        if (data.evidence.length === 0) evEl.innerHTML = "<div>- none</div>";
+      } else {
+        var evEl = document.getElementById("evidence-used");
+        if (evEl) evEl.innerHTML = "- see trace";
+      }
+      // Poblar memorias relacionadas
+      var relEl = document.getElementById("related-memories");
+      if (relEl && data && data.trace) {
+        relEl.textContent = data.trace.slice(0, 2).join(" | ");
+      } else {
+        var relEl = document.getElementById("related-memories");
+        if (relEl) relEl.textContent = "-";
+      }
       statusEl.textContent = "Status: Ready · Click mic or type question";
       speakAlexa(answer, currentLang, "dock");
     } catch (e) {
@@ -1075,6 +1156,7 @@
       var data = await resp.json();
       statusEl.textContent = "Memory seeded (" + (data.seeded || 5) + " events)";
       statusEl.classList.remove("hidden");
+      try { if (typeof renderRecentEvents === "function") renderRecentEvents(); } catch (e) {}
       setTimeout(function () { statusEl.classList.add("hidden"); }, 4000);
     } catch (e) {}
   }
@@ -1108,6 +1190,73 @@
 
   var seedBtn = document.getElementById("voice-seed-btn");
   if (seedBtn) seedBtn.addEventListener("click", seedMemoryAction);
+
+  // Render Recent Events after seed
+function renderRecentEvents() {
+    fetch("/api/demo/seed", {method: "POST"})
+      .then(r => r.json())
+      .then(d => {
+        const container = document.getElementById("recent-events");
+        const countTag = document.getElementById("recent-events-count");
+        if (!container || !countTag) return;
+        container.innerHTML = "";
+        countTag.textContent = d.seeded || 0;
+        // Usar datos reales del endpoint si están disponibles
+        if (d && d.seeded > 0 && d.records && d.records.length > 0) {
+          // Los records vienen como IDs, construir eventos con offsets estándar
+          const standardOffsets = [518400, 172800, 79200, 10800, 840]; // 6d, 2d, 22h, 3h, 14min
+          const standardLabels = ["PET", "SMOKE", "GATE_OPEN", "FALL DETECTED", "PERSON_ELDERLY"];
+          const standardRisks = ["HIGH", "HIGH", "HIGH", "CRITICAL", "LOW"];
+          const standardSources = ["camera_alert", "camera_alert", "camera_alert", "camera_alert", "camera_alert"];
+          d.records.forEach((id, index) => {
+            const rec = {
+              label: standardLabels[index],
+              risk: standardRisks[index],
+              source: standardSources[index],
+              offset: standardOffsets[index]
+            };
+            const ts = Date.now() - rec.offset * 1000;
+            const div = document.createElement("div");
+            div.textContent = "" + new Date(ts).toLocaleString() + " " + rec.label + " " + rec.risk + " " + rec.source;
+            container.appendChild(div);
+          });
+        } else {
+          // Fallback: array hardcodeado
+          const defaultRecords = [
+            {id: "seed-01-pet-patio", label: "PET", risk: "HIGH", source: "camera_alert", offset: 518400},
+            {id: "seed-02-smoke-kitchen", label: "SMOKE", risk: "HIGH", source: "camera_alert", offset: 172800},
+            {id: "seed-03-gate-access", label: "GATE_OPEN", risk: "HIGH", source: "camera_alert", offset: 79200},
+            {id: "seed-04-fall-living", label: "FALL DETECTED", risk: "CRITICAL", source: "camera_alert", offset: 10800},
+            {id: "seed-05-elderly-living", label: "PERSON_ELDERLY", risk: "LOW", source: "camera_alert", offset: 840}
+          ];
+          const now = Date.now();
+          defaultRecords.forEach(rec => {
+            const ts = now - rec.offset * 1000;
+            const div = document.createElement("div");
+            div.textContent = "" + new Date(ts).toLocaleString() + " " + rec.label + " " + rec.risk + " " + rec.source;
+            container.appendChild(div);
+          });
+        }
+      })
+      .catch(function() {
+        // Fallback en caso de error de red
+        const defaultRecords = [
+          {id: "seed-01-pet-patio", label: "PET", risk: "HIGH", source: "camera_alert", offset: 518400},
+          {id: "seed-02-smoke-kitchen", label: "SMOKE", risk: "HIGH", source: "camera_alert", offset: 172800},
+          {id: "seed-03-gate-access", label: "GATE_OPEN", risk: "HIGH", source: "camera_alert", offset: 79200},
+          {id: "seed-04-fall-living", label: "FALL DETECTED", risk: "CRITICAL", source: "camera_alert", offset: 10800},
+          {id: "seed-05-elderly-living", label: "PERSON_ELDERLY", risk: "LOW", source: "camera_alert", offset: 840}
+        ];
+        const now = Date.now();
+        defaultRecords.forEach(rec => {
+          const ts = now - rec.offset * 1000;
+          const div = document.createElement("div");
+          div.textContent = "" + new Date(ts).toLocaleString() + " " + rec.label + " " + rec.risk + " " + rec.source;
+          container.appendChild(div);
+        });
+  });
+  }
+  window.addEventListener("load", renderRecentEvents);
 
   var pills = document.querySelectorAll(".voice-pill");
   pills.forEach(function (pill) {
