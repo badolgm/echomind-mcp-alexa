@@ -1,15 +1,26 @@
-# MASTERDOC — Echosystem · echomind-mcp-alexa
+# MASTERDOC — EchoMind · echomind-mcp-alexa
 
 **Definitive technical document**
 Amazon Developer Hackathon — Build, Ship, Shape 2026
 
 | | |
 | --- | --- |
-| Product | Echosystem — Active Ambient Awareness for Alexa+ |
+| Product | EchoMind — Cognitive Memory Agent for Alexa+ |
 | Repo | `echomind-mcp-alexa` |
 | Owner | Badolgm |
 | License | MIT (2026) |
 | Stack | Python 3.11 · FastAPI · AWS Bedrock (boto3) · MCP Streamable HTTP |
+
+> **Vision (official).** EchoMind **is not a camera, a dashboard, a "Qdrant robot" or a CCTV
+> platform**. EchoMind **is Alexa+** with memory: it **observes → remembers → understands →
+> converses → responds**. **The protagonist is always Alexa.** The camera is a **vision sensor
+> (input)** and the dashboard is the **operational/demo console** — neither is the product. The
+> differentiator is **memory** (`VectorMemoryService` + `MemoryBridge` + `MemoryConverse`). Devices
+> (Echo Show / Echo Hub / Ring / Blink…) appear only as **Alexa Ecosystem Devices**. The Facility
+> Digital Twin is **post-hackathon vision (not implemented)**. **Official narrative:** `Alexa+ →
+> EchoMind (cognitive agent) → Memory → Context → Conversation → Action`. The camera, the Vivotek
+> and Android are **NOT the product** — they are sensors/devices in Alexa's ecosystem. See
+> [`PROJECT_VISION_ALIGNMENT.md`](PROJECT_VISION_ALIGNMENT.md).
 
 ---
 
@@ -23,7 +34,8 @@ tooling, state and I/O patterns.
 
 ## 2. Value proposition: Active Ambient Awareness
 
-Echosystem turns Alexa+ into a **proactive caregiver and guardian**, not just a responder.
+EchoMind turns Alexa+ into a **proactive caregiver and guardian with memory**, not just a
+responder.
 It continuously ingests ambient snapshots (visual, audio, sensor text) and produces **risk-graded
 awareness reports** with a recommended action for Alexa+ to speak or escalate.
 
@@ -240,7 +252,10 @@ code changes.
 - [x] Phase 7 — Live Vivotek IP camera: real-time snapshot feed, graceful fallback frame, AI detection overlay.
 - [x] Phase 8 — Autonomous ambient watchdog: background prediction engine (sensors + frame motion), proactive hot-word alerts and Spanish text-to-speech on the dashboard.
 
-## 14. Web Control Center
+## 14. Operational Console (Web Control Center)
+
+> **Not the product.** The console visualises **Alexa's memory and senses** for demos/ops. The
+> protagonist is **Alexa+**; the camera panel is a **vision sensor** view.
 
 `/dashboard` (or `/`) serves the EchoMind MCP Control Center: a dark slate UI with neon cyan and
 Amazon orange accents, pure HTML + Tailwind (CDN) + vanilla JS. It polls `/metrics` every 2 s and
@@ -272,7 +287,10 @@ The right column includes the **Alexa Ecosystem Devices** catalogue with direct 
 that opens a modal explaining automatic device discovery over **JSON-RPC / MCP Streamable HTTP**
 (`initialize` → handshake, `tools/list` → skills, `tools/call` → live invocation).
 
-## 15. Live Vivotek camera integration (Phase 7)
+## 15. Vision sensor — live Vivotek integration (Phase 7)
+
+> **Alexa's eye, not the product.** The Vivotek is a **vision sensor (input)** that feeds
+> observations into memory. If it is unavailable, **Alexa still remembers and converses**.
 
 `VivotekCameraAdapter` (`src/infrastructure/adapters/iot/vivotek_adapter.py`) is an async `httpx`
 client for the FD8367 snapshot endpoint (`http://192.168.40.10/cgi-bin/viewer/video.jpg`, override
@@ -297,6 +315,8 @@ whole words, so tokens embedded in labels (e.g. `cat` inside `location`) never t
 detections.
 
 ## 16. Autonomous Ambient Watchdog (Phase 8)
+
+> **This is Alexa's ambient sense**, the proactive input to her memory — not a camera feature.
 
 **Problem solved.** Before Phase 8 the dashboard only reacted: snapshots refreshed but nothing
 predicted unless a tool was explicitly invoked with text. There was no continuous cognition.
@@ -343,6 +363,9 @@ share the same alerting channel.
   `black` limpio y documentación completa (`README.md` + `MASTERDOC.md`).
 
 ## 18. Estado actual — Fases 7-8 completadas
+
+> Reading this section: camera and resilience are **enablers** for **Alexa's memory**. The product
+> is Alexa+; the camera is a sense, the dashboard a console.
 
 **Camera.** Real integration of a **Vivotek FD8367**: `http.cgi-bin/viewer/video.jpg` snapshots
 verified live (~**62 KB / JPEG frame** at `192.168.40.10`), night vision via built-in **IR LEDs**

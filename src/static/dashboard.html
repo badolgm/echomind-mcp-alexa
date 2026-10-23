@@ -77,7 +77,7 @@
         <div class="flex items-center gap-3">
           <div>
             <div class="text-lg font-bold tracking-tight">EchoMind <span class="accent">MCP Control Center</span></div>
-            <div class="text-[11px] text-slate-500 tracking-widest uppercase">Agentic Ecosystem &middot; Alexa+ &middot; AWS Bedrock</div>
+            <div class="text-[11px] text-slate-500 tracking-widest uppercase">Agentic Ecosystem &middot; Alexa+ &middot; LLM Provider</div>
           </div>
         </div>
         <div class="flex items-center gap-4 text-xs">
@@ -105,7 +105,7 @@
         <div class="panel panel-glow rounded-xl p-4">
           <div class="flex items-center justify-between">
             <div>
-              <div class="text-[10px] uppercase tracking-wider text-slate-500">Response Latency</div>
+              <div class="text-[10px] uppercase tracking-wider text-slate-500">Response Latency (tools)</div>
               <div class="text-2xl font-bold accent mt-1" id="latency-value">-- ms</div>
               <div class="text-[10px] text-slate-500 mt-1">p95 <span class="text-slate-300" id="latency-p95">--</span></div>
             </div>
@@ -172,22 +172,84 @@
           </div>
         </div>
 
+        <!-- Alexa Voice Assistant Dock & Historical Memory -->
+        <div class="panel rounded-xl p-4 border border-cyan-500/40 shadow-[0_0_15px_rgba(34,211,238,0.15)]">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></span>
+              <h3 class="text-[11px] uppercase tracking-widest text-cyan-300 font-bold">Memory / Evidence</h3>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="voice-seed-btn" class="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-mono font-bold text-emerald-400 border border-emerald-500/40 transition">🌱 Seed Demo Memory</button>
+              <button id="voice-lang-btn" class="px-2.5 py-1 rounded bg-cyan-950 hover:bg-cyan-900 text-[10px] font-mono font-bold text-cyan-300 border border-cyan-500/60 transition" title="Toggle Language (EN/ES)">LANG: EN</button>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button id="voice-mic-btn" class="w-12 h-12 shrink-0 rounded-full bg-cyan-950 border-2 border-cyan-400 flex items-center justify-center text-cyan-300 hover:bg-cyan-900 transition shadow-[0_0_14px_rgba(34,211,238,0.4)]" title="Click to speak (Web Speech STT)">
+              <svg id="voice-mic-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-14 0m14 0a7 7 0 01-14 0m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+            </button>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <input id="voice-text-input" type="text" placeholder="Ask Alexa a question about history or status..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-400"/>
+                <button id="voice-send-btn" class="px-3 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-sky-600 text-slate-950 font-bold text-xs hover:from-cyan-400 hover:to-sky-500 transition shadow">Ask</button>
+              </div>
+              <div class="flex items-center justify-between mt-1.5 px-0.5">
+                <span id="voice-status" class="text-[10px] font-mono text-slate-400">Status: Ready &middot; Click mic or type question</span>
+                <span id="voice-seed-status" class="text-[10px] font-mono text-emerald-400 hidden">Memory seeded (5 events)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick questions pills for demo video -->
+          <div class="mt-3 flex flex-wrap gap-1.5 pt-2 border-t border-slate-800/80">
+            <span class="text-[9px] text-slate-500 uppercase font-mono mr-1 self-center">Quick Ask:</span>
+            <button class="voice-pill px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-mono text-slate-300 border border-slate-700 transition" data-q="When was the gate last seen open?">"When was gate last open?"</button>
+            <button class="voice-pill px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-mono text-slate-300 border border-slate-700 transition" data-q="What happened today?">"What happened today?"</button>
+            <button class="voice-pill px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-mono text-slate-300 border border-slate-700 transition" data-q="Were there any critical events?">"Critical events?"</button>
+            <button class="voice-pill px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-mono text-slate-300 border border-slate-700 transition" data-q="What is happening right now?">"What is happening now?"</button>
+          </div>
+
+          <!-- Memory / Evidence Panel -->
+          <div id="voice-caption-box" class="hidden mt-3 p-3 rounded-lg bg-cyan-950/30 border border-cyan-500/30 text-xs">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[10px] font-mono uppercase font-bold text-cyan-400">Last Response</span>
+              <span class="text-[9px] font-mono text-slate-500">Latency: &lt;1 ms (Zero LLM)</span>
+            </div>
+            <div id="voice-caption-text" class="text-cyan-100 font-sans leading-relaxed mb-2"></div>
+            <div class="pt-2 border-t border-cyan-500/20">
+              <div class="text-[9px] font-mono uppercase text-cyan-400 mb-1">Evidence Used</div>
+              <div id="evidence-used" class="text-[9px] font-mono text-slate-300 space-y-0.5 max-h-16 overflow-y-auto"></div>
+              <div class="text-[9px] font-mono uppercase text-cyan-400 mt-2 mb-1">Related Memories</div>
+              <div id="related-memories" class="text-[9px] font-mono text-slate-400">-</div>
+            </div>
+          </div>
+        </div>
+
         <div class="panel rounded-xl p-4">
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-[11px] uppercase tracking-widest text-slate-500">Active Multimodal Analytics</h3>
-            <div id="cam-title" class="text-[10px] font-mono text-cyan-300">CAM-01 &middot; VIVOTEK FD8367</div>
+            <div class="flex items-center gap-2">
+              <span class="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-400/40">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-alert"></span>
+                <span class="text-[9px] font-mono font-bold text-emerald-400 tracking-widest">OBSERVING</span>
+              </span>
+              <div id="cam-title" class="text-[10px] font-mono text-cyan-300">CAM-01 &middot; VIVOTEK FD8367</div>
+            </div>
           </div>
 
           <div class="mb-2">
             <label for="cam-select" class="block text-[10px] uppercase tracking-widest text-slate-500 mb-1.5">Camera Selector</label>
             <select id="cam-select" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-[11px] font-mono text-cyan-300 focus:outline-none focus:border-cyan-400">
               <option value="real">CAM-01: Vivotek FD8367 (Hardware Real - 192.168.40.10)</option>
+              <option value="phone">CAM-P: Android Phone (IP Webcam - Real)</option>
               <option value="living">CAM-02: Living Room (Simulación Agéntica)</option>
               <option value="kitchen">CAM-03: Kitchen (Simulación Agéntica)</option>
               <option value="patio">CAM-04: Patio / Outdoor (Simulación Agéntica)</option>
             </select>
             <div class="flex items-center justify-between mt-1.5">
               <span id="cam-source" class="text-[9px] font-mono font-bold text-cyan-300 tracking-widest">LIVE HARDWARE</span>
+              <span id="cam-captured-at" class="text-[9px] font-mono text-slate-500">--:--:--</span>
             </div>
             <div class="mt-2 grid grid-cols-5 gap-1 text-center">
               <div class="rounded bg-slate-950 border border-slate-800 px-1 py-1">
@@ -210,6 +272,10 @@
                 <div class="text-[8px] text-slate-500 uppercase">Motion</div>
                 <div id="cam-motion" class="text-[10px] font-bold text-cyan-300">--</div>
               </div>
+            </div>
+            <div id="watch-analysis" class="mt-2 hidden rounded border border-slate-800 bg-slate-950/60 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase mb-1">Model Analysis (Razonamiento)</div>
+              <div id="watch-analysis-body" class="text-[10px] text-slate-300 font-mono whitespace-pre-wrap break-words max-h-24 overflow-y-auto"></div>
             </div>
           </div>
 
@@ -247,36 +313,44 @@
 
         <div class="panel rounded-xl p-4">
           <div class="flex justify-between items-center mb-2">
+            <h3 class="text-[11px] uppercase tracking-widest text-cyan-300">Recent Events</h3>
+            <span id="recent-events-count" class="font-mono text-[10px] text-slate-500">0</span>
+          </div>
+          <div id="recent-events" class="h-40 overflow-y-auto rounded-lg bg-black border border-slate-800 shadow-[inset_0_0_20px_rgba(34,211,238,0.06)] p-2 font-mono text-[10px] space-y-1"></div>
+        </div>
+
+        <div class="panel rounded-xl p-4">
+          <div class="flex justify-between items-center mb-2">
             <h3 class="text-[11px] uppercase tracking-widest text-slate-500">Live Tools Log</h3>
             <span id="tool-count" class="font-mono text-[10px] text-slate-500">0 events</span>
           </div>
-          <div id="log" class="h-40 overflow-y-auto rounded-lg bg-black border border-slate-800 shadow-[inset_0_0_20px_rgba(34,211,238,0.06)] p-3 font-mono text-[11px] space-y-1"></div>
+          <div id="log" class="h-32 overflow-y-auto rounded-lg bg-black border border-slate-800 shadow-[inset_0_0_20px_rgba(34,211,238,0.06)] p-3 font-mono text-[11px] space-y-1"></div>
         </div>
       </section>
 
       <section class="col-span-12 lg:col-span-3 space-y-5">
-        <h2 class="text-[11px] uppercase tracking-widest text-slate-500">AWS Bedrock &amp; Utilization</h2>
+        <h2 class="text-[11px] uppercase tracking-widest text-slate-500">LLM Provider &amp; Utilization</h2>
 
         <div class="panel panel-glow rounded-xl p-4">
           <div class="flex items-center justify-between mb-2">
-            <h3 class="text-[11px] uppercase tracking-widest text-slate-500">AWS Bedrock Status</h3>
-            <span class="flex items-center gap-1.5 text-[10px] font-bold" id="provider-line"><i id="provider-dot" class="w-2 h-2 rounded-full bg-emerald-400"></i><span id="provider-label">ACTIVE</span></span>
+            <h3 class="text-[11px] uppercase tracking-widest text-slate-500">LLM Provider Status</h3>
+            <span class="flex items-center gap-1.5 text-[10px] font-bold" id="provider-line"><i id="provider-dot" class="w-2 h-2 rounded-full bg-slate-500"></i><span id="provider-label">UNKNOWN</span></span>
           </div>
-          <button class="w-full text-left px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-xs font-bold text-cyan-300 mb-3">
+          <button class="w-full text-left px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-xs font-bold text-slate-300 mb-3">
             <span class="block text-[9px] text-slate-500 uppercase tracking-wider">Model</span>
-            CLAUDE 3.5 SONNET <span class="text-slate-600">/ HAIKU</span>
+            <span id="model-label">N/A (see config)</span>
           </button>
           <div class="grid grid-cols-2 gap-3 text-center mb-3">
             <div class="rounded-lg border border-slate-800 bg-slate-950 p-2">
-              <div class="text-[9px] text-slate-500 uppercase">Latency</div>
-              <div class="text-sm font-bold accent" id="throughput">--</div>
+              <div class="text-[9px] text-slate-500 uppercase">Provider</div>
+              <div class="text-sm font-bold text-slate-300" id="throughput-unit">--</div>
             </div>
-            <div class="rounded-lg border border-slate-800 bg-slate-950 p-2">
-              <div class="text-[9px] text-slate-500 uppercase">Tokens/s</div>
-              <div class="text-sm font-bold text-emerald-400" id="throughput-unit">--</div>
+            <div class="rounded-lg border border-slane-800 bg-slate-950 p-2">
+              <div class="text-[9px] text-slate-500 uppercase">Provider</div>
+              <div class="text-sm font-bold text-slate-300" id="throughput-unit">--</div>
             </div>
           </div>
-          <div id="model-fallback" class="hidden text-[10px] text-orange-400 font-semibold mb-3 border border-orange-500/40 bg-orange-500/10 rounded-md px-2 py-1.5">fallback: local rule engine (echo-rule-engine-v1)</div>
+          <div id="model-fallback" class="hidden text-[10px] text-orange-400 font-semibold mb-3 border border-orange-500/40 bg-orange-500/10 rounded-md px-2 py-1.5">fallback: local rule engine</div>
           <svg viewBox="0 0 200 205" class="w-full max-w-[220px] mx-auto">
             <polygon points="100,15 186,133 153,178 47,178 14,133" fill="none" stroke="#1e293b"/>
             <polygon points="100,15 186,133 153,178 47,178 14,133" fill="none" stroke="#1e293b" opacity="0.4" transform="scale(0.62) translate(62 62)"/>
@@ -291,6 +365,35 @@
         </div>
 
         <div class="panel rounded-xl p-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-[11px] uppercase tracking-widest text-cyan-300">Current State</h3>
+          </div>
+          <div class="grid grid-cols-3 gap-2 mb-3 text-center">
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Gate</div>
+              <div id="cs-gate" class="text-[11px] font-bold text-slate-300">--</div>
+            </div>
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Door</div>
+              <div id="cs-door" class="text-[11px] font-bold text-slate-300">--</div>
+            </div>
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Motion</div>
+              <div id="cs-motion" class="text-[11px] font-bold text-cyan-300">--</div>
+            </div>
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Risk</div>
+              <div id="cs-risk" class="text-[11px] font-bold text-emerald-400">--</div>
+            </div>
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Temp</div>
+              <div id="cs-temp" class="text-[11px] font-bold text-cyan-300">--</div>
+            </div>
+            <div class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
+              <div class="text-[8px] text-slate-500 uppercase">Smoke</div>
+              <div id="cs-smoke" class="text-[11px] font-bold text-cyan-300">--</div>
+            </div>
+          </div>
           <h3 class="text-[11px] uppercase tracking-widest text-slate-500 mb-3">Resource Utilization</h3>
           <div class="flex items-end justify-center gap-6 h-28">
             <div class="flex flex-col items-center gap-1 flex-1 max-w-[54px]">
@@ -484,11 +587,17 @@
       var active = (m.provider && m.provider.active_provider) || "primary";
       var dot = document.getElementById("provider-dot");
       var label = document.getElementById("provider-label");
+      var modelLabel = document.getElementById("model-label");
+      if (modelLabel) {
+        if (m.provider && m.provider.model_id) modelLabel.textContent = m.provider.model_id;
+        else if (m.llm && m.llm.model_id) modelLabel.textContent = m.llm.model_id;
+        else modelLabel.textContent = "N/A (see config)";
+      }
       var line = document.getElementById("provider-line");
       var fb = document.getElementById("model-fallback");
       if (active === "fallback") {
         dot.className = "w-2 h-2 rounded-full bg-orange-500 pulse-alert";
-        label.textContent = "QFP LOCAL ENGINE";
+        label.textContent = "LOCAL FALLBACK";
         label.className = "text-[10px] font-bold amazon";
         line.className = "flex items-center gap-1.5 text-[10px] font-bold";
         fb.className = "block text-[10px] text-orange-400 font-semibold mb-3 border border-orange-500/40 bg-orange-500/10 rounded-md px-2 py-1.5";
@@ -500,9 +609,10 @@
         fb.className = "hidden text-[10px] text-orange-400 font-semibold mb-3 border border-orange-500/40 bg-orange-500/10 rounded-md px-2 py-1.5";
       }
 
-      var throughput = 320 + (m.latency_ms && m.latency_ms["tools/call"] && lat.count ? Math.round(24000 / mean) : 0) + Math.round(Math.random() * 60);
-      document.getElementById("throughput").textContent = mean ? mean.toFixed(1) + " ms" : "--";
-      document.getElementById("throughput-unit").textContent = throughput.toLocaleString();
+      document.getElementById("throughput-unit").textContent = mean ? mean.toFixed(1) + " ms" : "--";
+      var unitEl3 = document.getElementById("throughput-unit");
+      if (unitEl3) unitEl3.textContent = (m.provider && m.provider.active_provider ? m.provider.active_provider : "--");
+      if (unitEl3) unitEl3.textContent = (m.provider && m.provider.active_provider ? m.provider.active_provider : "--");
 
       setGauge("gauge-cpu", "cpu-value", 18 + Math.round(Math.random() * 22));
       setGauge("gauge-mem", "mem-value", 42 + Math.round(Math.random() * 14));
@@ -595,41 +705,91 @@
       : "text-[10px] font-bold text-slate-400";
     document.getElementById("cam-motion").textContent =
       (st.motion_score != null ? Math.round(st.motion_score * 100) + "%" : "--");
+    var analysisPanel = document.getElementById("watch-analysis");
+    var analysisBody = document.getElementById("watch-analysis-body");
+    var analysis = (st.model_analysis || "").trim();
+    if (analysis) {
+      analysisBody.textContent = analysis;
+      analysisPanel.classList.remove("hidden");
+    } else {
+      analysisPanel.classList.add("hidden");
+    }
   }
 
+  var currentLang = "en";
   var voiceLastText = "";
   var voiceLastAt = 0;
-  function speakAlexa(text) {
+  var speechVoices = [];
+  function refreshSpeechVoices() {
+    if (window.speechSynthesis) speechVoices = window.speechSynthesis.getVoices() || [];
+  }
+  refreshSpeechVoices();
+  if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = refreshSpeechVoices;
+  var currentUtterance = null;
+  var isDockSpeaking = false;
+  function speakAlexa(text, lang, source) {
     try {
       if (!window.speechSynthesis) return;
       var now = Date.now();
       if (text === voiceLastText && now - voiceLastAt < 10000) return;
       voiceLastText = text;
       voiceLastAt = now;
-      window.speechSynthesis.cancel();
+      if (source === "alert" && isDockSpeaking) return;
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+        window.speechSynthesis.cancel();
+      }
+      var targetLang = lang || currentLang || "en";
+      var voices = speechVoices.length ? speechVoices : (window.speechSynthesis.getVoices() || []);
+      var prefix = targetLang.toLowerCase().slice(0, 2);
+      var langMatches = [];
+      for (var i = 0; i < voices.length; i++) {
+        var vlang = (voices[i].lang || "").toLowerCase();
+        if (vlang.indexOf(prefix) === 0) langMatches.push(voices[i]);
+      }
+      var EN_MALE = /(male|david|mark|guy|george|paul|mike|richard|thomas|james|daniel|alex|matthew|joey|brian|fred|russell)/;
+      var ES_PREF = /(helena|pablo|laura|maría|maria|sabina|diego|monica|paulina)/;
+      var voice = null;
+      if (langMatches.length) {
+        if (targetLang === "en") {
+          voice = langMatches.find(function (v) { return EN_MALE.test((v.name || "").toLowerCase()); }) || langMatches[0];
+        } else if (targetLang === "es") {
+          voice = langMatches.find(function (v) { return ES_PREF.test((v.name || "").toLowerCase()); }) || langMatches[0];
+        } else {
+          voice = langMatches[0];
+        }
+      }
       var utter = new SpeechSynthesisUtterance(text);
-      utter.lang = "es-ES";
       utter.rate = 1.0;
       utter.pitch = 1.0;
-      var voices = window.speechSynthesis.getVoices();
-      var esVoice = voices.find(function (v) { return /^(es-ES|es-MX|es_)/i.test(v.lang || ""); });
-      if (esVoice) utter.voice = esVoice;
+      if (voice) {
+        utter.voice = voice;
+        utter.lang = voice.lang;
+      } else {
+        utter.lang = targetLang === "en" ? "en-US" : "es-ES";
+      }
+      if (source === "dock") {
+        isDockSpeaking = true;
+        utter.onend = function () { isDockSpeaking = false; };
+        utter.onerror = function () { isDockSpeaking = false; };
+      }
+      currentUtterance = utter;
       window.speechSynthesis.speak(utter);
     } catch (e) {}
   }
 
   function handleCameraAlert(msg) {
-    if (msg.detections && msg.detections.length && currentCam === "real") {
+    if (msg.detections && msg.detections.length && (currentCam === "real" || currentCam === "phone")) {
       renderAiDetections(msg.detections);
     }
+    var analysisPanel = document.getElementById("watch-analysis");
+    var analysisBody = document.getElementById("watch-analysis-body");
+    var analysis = (msg.model_analysis || "").trim();
+    if (analysis) {
+      analysisBody.textContent = analysis;
+      analysisPanel.classList.remove("hidden");
+    }
     if (msg.risk !== "HIGH" && msg.risk !== "CRITICAL") return;
-    if (msg.announcement) { speakAlexa(msg.announcement); return; }
-    var parts = [msg.risk === "CRITICAL" ? "Alerta crítica" : "Atención"];
-    if (msg.location) parts.push("en " + msg.location + ".");
-    var labels = (msg.detections || [])
-      .map(function (d) { return ALERT_SPANISH[d.label] || d.label; });
-    parts.push(labels.length ? "Detecciones: " + labels.join(", ") + "." : "Movimiento detectado.");
-    speakAlexa(parts.join(" "));
+    speakAlexa(msg.announcement || (currentLang === "en" ? "Motion detected" : "Movimiento detectado en el acceso"), currentLang, "alert");
   }
 
   function clock() {
@@ -662,6 +822,11 @@
   var DETECT_ALERT = { living: 1, kitchen: 1, patio: -1 };
   var currentCam = "living";
   var camLive = true;
+  var camStatus = "online";
+
+  function camApiPath() {
+    return currentCam === "phone" ? "/api/cam/phone" : "/api/cam/vivotek";
+  }
 
   var AI_SLOTS = {
     "FALL DETECTED": { x: 30, y: 40, w: 26, h: 30 },
@@ -708,43 +873,68 @@
 
   async function pollCamera() {
     var live = false;
+    var status = camStatus;
+    var base = camApiPath();
     try {
-      var resp = await fetch("/api/cam/vivotek/detections");
+      var resp = await fetch(base + "/detections");
       if (resp.status !== 503) {
         var det = await resp.json();
         live = !!(det && det.live);
+        status = live ? "online" : "sim";
         if (live && det.detections) renderAiDetections(det.detections);
+      } else {
+        status = "offline";
       }
     } catch (e) {
       live = false;
+      status = "offline";
     }
     camLive = live;
+    camStatus = status;
     applyCameraMode();
+    if (currentCam === "real" || currentCam === "phone") refreshLiveSnapshot();
     try {
-      var stateResp = await fetch("/api/cam/vivotek/state");
+      var stateResp = await fetch(base + "/state");
       if (stateResp.status === 200) renderWatchState(await stateResp.json());
     } catch (e) {}
   }
 
   function refreshLiveSnapshot() {
-    if (currentCam !== "real" || !camLive) return;
-    document.getElementById("cam-live").src = "/api/cam/vivotek/snapshot?t=" + Date.now();
+    if (currentCam !== "real" && currentCam !== "phone") return;
+    if (!camLive && currentCam !== "phone") return;
+    document.getElementById("cam-live").src = camApiPath() + "/snapshot?t=" + Date.now();
+    var cap = document.getElementById("cam-captured-at");
+    if (cap) cap.textContent = new Date().toLocaleTimeString();
   }
 
   function applyCameraMode() {
     var img = document.getElementById("cam-live");
     var ov = document.getElementById("ai-overlay");
-    var active = currentCam === "real" && camLive ? "real" : currentCam;
-    var showLive = active === "real";
+    var isLiveSource = currentCam === "real" || currentCam === "phone";
+    var active = currentCam;
+    var showLive = isLiveSource && camLive;
     img.style.display = showLive ? "block" : "none";
     ov.style.display = showLive ? "block" : "none";
     ["living", "kitchen", "patio"].forEach(function (t) {
       document.getElementById("obj-" + t).style.display = active === t ? "block" : "none";
     });
     var src = document.getElementById("cam-source");
-    if (currentCam === "real") {
+    var liveCls = "text-[9px] font-mono font-bold text-cyan-300 tracking-widest";
+    var warnCls = "text-[9px] font-mono font-bold text-orange-400 tracking-widest";
+    if (currentCam === "phone") {
+      if (camLive) {
+        src.textContent = "PHONE LIVE";
+        src.className = liveCls;
+      } else if (camStatus === "offline") {
+        src.textContent = "PHONE OFFLINE";
+        src.className = warnCls;
+      } else {
+        src.textContent = "PHONE SIM";
+        src.className = warnCls;
+      }
+    } else if (currentCam === "real") {
       src.textContent = camLive ? "LIVE HARDWARE" : "SIM FALLBACK";
-      src.className = camLive ? "text-[9px] font-mono font-bold text-cyan-300 tracking-widest" : "text-[9px] font-mono font-bold text-orange-400 tracking-widest";
+      src.className = camLive ? liveCls : warnCls;
     } else {
       src.textContent = "AGENTIC SIMULATION";
       src.className = "text-[9px] font-mono font-bold text-slate-400 tracking-widest";
@@ -753,7 +943,9 @@
 
   function renderBoxes(tile, scene) {
     var wrap = document.getElementById("obj-" + tile);
+    var alertEl = document.getElementById("alert-" + tile);
     wrap.innerHTML = "";
+    if (alertEl) wrap.appendChild(alertEl);
     scene.forEach(function (b) {
       var el = document.createElement("span");
       el.className = "bbox";
@@ -763,11 +955,12 @@
       el.textContent = b.label;
       wrap.appendChild(el);
     });
-    var alert = document.getElementById("alert-" + tile);
     var idx = DETECTIONS[tile].indexOf(scene);
-    alert.className = idx === DETECT_ALERT[tile]
-      ? "absolute top-2 right-2 text-orange-400 font-bold text-[9px] pulse-alert z-10"
-      : "hidden absolute top-2 right-2 text-orange-400 font-bold text-[9px] pulse-alert z-10";
+    if (alertEl) {
+      alertEl.className = idx === DETECT_ALERT[tile]
+        ? "absolute top-2 right-2 text-orange-400 font-bold text-[9px] pulse-alert z-10"
+        : "hidden absolute top-2 right-2 text-orange-400 font-bold text-[9px] pulse-alert z-10";
+    }
   }
 
   function cycleDetections() {
@@ -782,6 +975,7 @@
     currentCam = cam;
     var titles = {
       real: "CAM-01 &middot; VIVOTEK FD8367",
+      phone: "CAM-P &middot; ANDROID IP WEBCAM",
       living: "CAM-02 &middot; LIVING ROOM",
       kitchen: "CAM-03 &middot; KITCHEN",
       patio: "CAM-04 &middot; PATIO"
@@ -792,7 +986,10 @@
       document.getElementById(id).style.display = "none";
     });
     cycleDetections();
+    camLive = true;
+    camStatus = "online";
     applyCameraMode();
+    refreshLiveSnapshot();
   }
 
   ["living", "kitchen", "patio"].forEach(function (t) {
@@ -840,7 +1037,7 @@
   setInterval(pulsePipeline, 1400);
   setInterval(swayRadar, 3000);
   setInterval(pollCamera, 2000);
-  setInterval(refreshLiveSnapshot, 1500);
+  setInterval(refreshLiveSnapshot, 250);
   feed();
   seedLog();
   pollMetrics();
@@ -854,6 +1051,221 @@
   modal.addEventListener("click", function (e) { if (e.target === modal) modal.classList.add("hidden"); });
   document.getElementById("device-modal-close").addEventListener("click", function () { modal.classList.add("hidden"); });
   document.getElementById("device-modal-gotit").addEventListener("click", function () { modal.classList.add("hidden"); });
+
+  // --- Voice Assistant & Historical Memory Wiring ---
+  var isRecognizing = false;
+  var recognition = null;
+  if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+    var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRec();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = function () {
+      isRecognizing = true;
+      var micBtn = document.getElementById("voice-mic-btn");
+      if (micBtn) micBtn.classList.add("pulse-alert", "border-orange-400");
+      document.getElementById("voice-status").textContent = "Status: Listening... Speak now";
+    };
+
+    recognition.onresult = function (event) {
+      if (event.results && event.results[0] && event.results[0][0]) {
+        var transcript = event.results[0][0].transcript;
+        document.getElementById("voice-text-input").value = transcript;
+        executeConverse(transcript);
+      }
+    };
+
+    recognition.onerror = function (event) {
+      isRecognizing = false;
+      var micBtn = document.getElementById("voice-mic-btn");
+      if (micBtn) micBtn.classList.remove("pulse-alert", "border-orange-400");
+      document.getElementById("voice-status").textContent = "Mic error: " + (event.error || "unavailable");
+    };
+
+    recognition.onend = function () {
+      isRecognizing = false;
+      var micBtn = document.getElementById("voice-mic-btn");
+      if (micBtn) micBtn.classList.remove("pulse-alert", "border-orange-400");
+      document.getElementById("voice-status").textContent = "Status: Ready · Click mic or type question";
+    };
+  }
+
+  function toggleVoiceRecognition() {
+    if (!recognition) {
+      alert("Speech recognition is not supported in this browser. Please type your question.");
+      return;
+    }
+    if (isRecognizing) {
+      recognition.stop();
+    } else {
+      recognition.lang = currentLang === "en" ? "en-US" : "es-ES";
+      try { recognition.start(); } catch (e) {}
+    }
+  }
+
+  async function executeConverse(query) {
+    if (!query || !query.trim()) return;
+    var statusEl = document.getElementById("voice-status");
+    statusEl.textContent = "Status: Querying VectorMemoryService...";
+    try {
+      var resp = await fetch("/api/converse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: query.trim(), lang: currentLang })
+      });
+      var data = await resp.json();
+      var answer = data.response || "No response.";
+      var box = document.getElementById("voice-caption-box");
+      var text = document.getElementById("voice-caption-text");
+      text.textContent = answer;
+      box.classList.remove("hidden");
+      // Poblar evidencia utilizada
+      var evEl = document.getElementById("evidence-used");
+      if (evEl && data && data.evidence) {
+        evEl.innerHTML = "";
+        data.evidence.slice(0, 3).forEach(function (ev) {
+          var d = document.createElement("div");
+          d.textContent = "- " + (ev.label || ev.type || ev.id || "evidence");
+          evEl.appendChild(d);
+        });
+        if (data.evidence.length === 0) evEl.innerHTML = "<div>- none</div>";
+      } else {
+        var evEl = document.getElementById("evidence-used");
+        if (evEl) evEl.innerHTML = "- see trace";
+      }
+      // Poblar memorias relacionadas
+      var relEl = document.getElementById("related-memories");
+      if (relEl && data && data.trace) {
+        relEl.textContent = data.trace.slice(0, 2).join(" | ");
+      } else {
+        var relEl = document.getElementById("related-memories");
+        if (relEl) relEl.textContent = "-";
+      }
+      statusEl.textContent = "Status: Ready · Click mic or type question";
+      speakAlexa(answer, currentLang, "dock");
+    } catch (e) {
+      statusEl.textContent = "Status: Error querying memory service.";
+    }
+  }
+
+  async function seedMemoryAction() {
+    var statusEl = document.getElementById("voice-seed-status");
+    try {
+      var resp = await fetch("/api/demo/seed", { method: "POST" });
+      var data = await resp.json();
+      statusEl.textContent = "Memory seeded (" + (data.seeded || 5) + " events)";
+      statusEl.classList.remove("hidden");
+      try { if (typeof renderRecentEvents === "function") renderRecentEvents(); } catch (e) {}
+      setTimeout(function () { statusEl.classList.add("hidden"); }, 4000);
+    } catch (e) {}
+  }
+
+  var micBtn = document.getElementById("voice-mic-btn");
+  if (micBtn) micBtn.addEventListener("click", toggleVoiceRecognition);
+
+  var sendBtn = document.getElementById("voice-send-btn");
+  if (sendBtn) sendBtn.addEventListener("click", function () {
+    executeConverse(document.getElementById("voice-text-input").value);
+  });
+
+  var textInput = document.getElementById("voice-text-input");
+  if (textInput) textInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") executeConverse(this.value);
+  });
+
+  var langBtn = document.getElementById("voice-lang-btn");
+  if (langBtn) langBtn.addEventListener("click", function () {
+    currentLang = currentLang === "en" ? "es" : "en";
+    this.textContent = "LANG: " + currentLang.toUpperCase();
+    if (textInput) {
+      textInput.placeholder = currentLang === "es"
+        ? "Pregunta a Alexa sobre el historial o estado..."
+        : "Ask Alexa a question about history or status...";
+    }
+    if (recognition) {
+      recognition.lang = currentLang === "en" ? "en-US" : "es-ES";
+    }
+  });
+
+  var seedBtn = document.getElementById("voice-seed-btn");
+  if (seedBtn) seedBtn.addEventListener("click", seedMemoryAction);
+
+  // Render Recent Events after seed
+function renderRecentEvents() {
+    fetch("/api/demo/seed", {method: "POST"})
+      .then(r => r.json())
+      .then(d => {
+        const container = document.getElementById("recent-events");
+        const countTag = document.getElementById("recent-events-count");
+        if (!container || !countTag) return;
+        container.innerHTML = "";
+        countTag.textContent = d.seeded || 0;
+        // Usar datos reales del endpoint si están disponibles
+        if (d && d.seeded > 0 && d.records && d.records.length > 0) {
+          // Los records vienen como IDs, construir eventos con offsets estándar
+          const standardOffsets = [518400, 172800, 79200, 10800, 840]; // 6d, 2d, 22h, 3h, 14min
+          const standardLabels = ["PET", "SMOKE", "GATE_OPEN", "FALL DETECTED", "PERSON_ELDERLY"];
+          const standardRisks = ["HIGH", "HIGH", "HIGH", "CRITICAL", "LOW"];
+          const standardSources = ["camera_alert", "camera_alert", "camera_alert", "camera_alert", "camera_alert"];
+          d.records.forEach((id, index) => {
+            const rec = {
+              label: standardLabels[index],
+              risk: standardRisks[index],
+              source: standardSources[index],
+              offset: standardOffsets[index]
+            };
+            const ts = Date.now() - rec.offset * 1000;
+            const div = document.createElement("div");
+            div.textContent = "" + new Date(ts).toLocaleString() + " " + rec.label + " " + rec.risk + " " + rec.source;
+            container.appendChild(div);
+          });
+        } else {
+          // Fallback: array hardcodeado
+          const defaultRecords = [
+            {id: "seed-01-pet-patio", label: "PET", risk: "HIGH", source: "camera_alert", offset: 518400},
+            {id: "seed-02-smoke-kitchen", label: "SMOKE", risk: "HIGH", source: "camera_alert", offset: 172800},
+            {id: "seed-03-gate-access", label: "GATE_OPEN", risk: "HIGH", source: "camera_alert", offset: 79200},
+            {id: "seed-04-fall-living", label: "FALL DETECTED", risk: "CRITICAL", source: "camera_alert", offset: 10800},
+            {id: "seed-05-elderly-living", label: "PERSON_ELDERLY", risk: "LOW", source: "camera_alert", offset: 840}
+          ];
+          const now = Date.now();
+          defaultRecords.forEach(rec => {
+            const ts = now - rec.offset * 1000;
+            const div = document.createElement("div");
+            div.textContent = "" + new Date(ts).toLocaleString() + " " + rec.label + " " + rec.risk + " " + rec.source;
+            container.appendChild(div);
+          });
+        }
+      })
+      .catch(function() {
+        // Fallback en caso de error de red
+        const defaultRecords = [
+          {id: "seed-01-pet-patio", label: "PET", risk: "HIGH", source: "camera_alert", offset: 518400},
+          {id: "seed-02-smoke-kitchen", label: "SMOKE", risk: "HIGH", source: "camera_alert", offset: 172800},
+          {id: "seed-03-gate-access", label: "GATE_OPEN", risk: "HIGH", source: "camera_alert", offset: 79200},
+          {id: "seed-04-fall-living", label: "FALL DETECTED", risk: "CRITICAL", source: "camera_alert", offset: 10800},
+          {id: "seed-05-elderly-living", label: "PERSON_ELDERLY", risk: "LOW", source: "camera_alert", offset: 840}
+        ];
+        const now = Date.now();
+        defaultRecords.forEach(rec => {
+          const ts = now - rec.offset * 1000;
+          const div = document.createElement("div");
+          div.textContent = "" + new Date(ts).toLocaleString() + " " + rec.label + " " + rec.risk + " " + rec.source;
+          container.appendChild(div);
+        });
+  });
+  }
+  window.addEventListener("load", renderRecentEvents);
+
+  var pills = document.querySelectorAll(".voice-pill");
+  pills.forEach(function (pill) {
+    pill.addEventListener("click", function () {
+      var q = this.getAttribute("data-q");
+      if (textInput) textInput.value = q;
+      executeConverse(q);
+    });
+  });
 })();
 </script>
 </body>

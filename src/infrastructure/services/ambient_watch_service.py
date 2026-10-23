@@ -14,6 +14,7 @@ and alerting 24/7 even behind the Quota Fallback Protocol.
 from __future__ import annotations
 
 import asyncio
+import io
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -24,7 +25,9 @@ from src.infrastructure.services.sensor_bus import SensorReading
 if TYPE_CHECKING:
     from src.infrastructure.adapters.iot.vivotek_adapter import CameraFrameSource
 
-MOTION_THRESHOLD = 0.12
+MOTION_THRESHOLD = 0.20
+MOTION_PIXEL_DIFF_THRESHOLD = 20
+MOTION_CONFIRMATION_FRAMES = 1
 _WATCH_ALERT_LEVELS = ("HIGH", "CRITICAL")
 _ALERT_TRIGGERS = frozenset({"GATE_OPEN", "PET_ESCAPING", "MOTION"})
 
@@ -45,6 +48,10 @@ _RECOMMENDATIONS_ES: dict[str, str] = {
     "LOW": "Sigue monitoreando: todo se ve normal.",
 }
 
+_NEUTRAL_ANNOUNCEMENT = (
+    "Sin detecciones activas. Todo normal.\n" "No active detections. All normal."
+)
+
 _SEVERITY = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
 
 
@@ -59,24 +66,70 @@ class AmbientPrediction:
     recommendation: str
 
 
-def frame_delta_ratio(first: bytes, second: bytes) -> float:
-    """Fraction of sampled bytes that differ between two frames.
+def _image_payload(data: bytes) -> bytes:
+    """Strip container headers so comparison ignores JPEG EXIF timestamps.
 
-    A coarse but real motion proxy for compressed JPEG snapshots: consecutive
-    frames of a static scene are near-identical, so a high delta ratio means
-    the scene is actually changing (movement/zoom/lighting shift).
+    Android IP Webcam embeds a fresh timestamp/EXIF block on every snapshot,
+    so raw-byte comparison of two static-scene JPEGs reports a large delta
+    even though the pixels are identical. Trimming the container (everything
+    before the SOS marker for JPEG, everything before IDAT for PNG) focuses
+    the delta on the entropy-coded pixel data, where real motion dominates.
+    """
+    if data.startswith(b"\xff\xd8"):
+        sos = data.rfind(b"\xff\xda")
+        if sos != -1 and sos + 4 <= len(data):
+            header_len = int.from_bytes(data[sos + 2 : sos + 4], "big")
+            start = sos + 2 + header_len
+            return data[start:]
+        return data
+    if data.startswith(b"\x89PNG"):
+        idat = data.find(b"IDAT")
+        if idat != -1:
+            return data[idat:]
+        return data
+    return data
+
+
+def frame_delta_ratio(first: bytes, second: bytes) -> float:
+    """Fraction of pixels that differ significantly between two frames.
+
+    Decodes both JPEG/PNG snapshots to a small grayscale thumbnail and counts
+    pixels whose brightness differs by more than ``MOTION_PIXEL_DIFF_THRESHOLD``.
+    This is robust against JPEG re-quantization noise (which changes compressed
+    bytes but barely changes decoded pixels) while reliably detecting real
+    motion (hand, mouse, person) that shifts pixel values across whole regions.
     """
     if not first or not second:
         return 0.0
-    samples = 4096
-    n = min(len(first), len(second))
-    step = max(1, n // samples)
-    checked = (n + step - 1) // step
+    try:
+        from PIL import Image
+
+        size = (48, 48)
+        img_a = Image.open(io.BytesIO(first)).convert("L").resize(size)
+        img_b = Image.open(io.BytesIO(second)).convert("L").resize(size)
+        pixels_a = img_a.tobytes()
+        pixels_b = img_b.tobytes()
+    except Exception:
+        first = _image_payload(first)
+        second = _image_payload(second)
+        samples = 4096
+        n = min(len(first), len(second))
+        step = max(1, n // samples)
+        checked = (n + step - 1) // step
+        if checked == 0:
+            return 0.0
+        changed = 0
+        for index in range(0, n, step):
+            if abs(first[index] - second[index]) >= 4:
+                changed += 1
+        return changed / checked
+
+    checked = len(pixels_a)
     if checked == 0:
         return 0.0
     changed = 0
-    for index in range(0, n, step):
-        if first[index] != second[index]:
+    for index in range(checked):
+        if abs(pixels_a[index] - pixels_b[index]) >= MOTION_PIXEL_DIFF_THRESHOLD:
             changed += 1
     return changed / checked
 
@@ -146,6 +199,7 @@ def predict_ambient_state(
 
     if motion_score >= MOTION_THRESHOLD:
         detections["MOTION"] = round(min(0.4 + motion_score, 0.85), 2)
+        escalate("HIGH")
 
     announcement = _announcement(risk, detections)
     recommendation = _RECOMMENDATIONS_ES[risk]
@@ -168,10 +222,9 @@ def _announcement(risk: str, detections: dict[str, float]) -> str:
         "HIGH": "Atención: ",
         "MEDIUM": "Aviso: ",
     }.get(risk, "")
-    if phrases:
-        body = "Detecciones: " + ", ".join(phrases) + ". "
-    else:
-        body = "Movimiento o cambio detectado en la cámara. "
+    if not phrases:
+        return prefix + _NEUTRAL_ANNOUNCEMENT
+    body = "Detecciones: " + ", ".join(phrases) + ". "
     return prefix + body + _RECOMMENDATIONS_ES[risk]
 
 
@@ -184,7 +237,7 @@ class AmbientWatchService:
         camera: CameraFrameSource,
         sensor_bus: Any,
         event_hub: EventHub,
-        interval: float = 3.0,
+        interval: float = 0.5,
         motion_threshold: float = MOTION_THRESHOLD,
     ) -> None:
         self._camera = camera
@@ -194,7 +247,7 @@ class AmbientWatchService:
         self._motion_threshold = motion_threshold
         self._prev_payload = b""
         self._prev_reading: SensorReading | None = None
-        self._prev_fingerprint: tuple[str, tuple[str, ...]] | None = None
+        self._motion_streak = 0
         self._stop = False
         self._last_state: dict[str, Any] = {
             "risk": "LOW",
@@ -217,11 +270,26 @@ class AmbientWatchService:
             motion = frame_delta_ratio(self._prev_payload, frame.data)
         self._prev_payload = frame.data
 
-        prediction = predict_ambient_state(reading, self._prev_reading, motion)
+        if motion >= self._motion_threshold:
+            self._motion_streak += 1
+        else:
+            self._motion_streak = 0
+        confirmed_motion = (
+            motion if self._motion_streak >= MOTION_CONFIRMATION_FRAMES else 0.0
+        )
+
+        prediction = predict_ambient_state(
+            reading, self._prev_reading, confirmed_motion
+        )
         self._prev_reading = reading
 
         detections = [dict(item) for item in prediction.detections]
         self._camera.record_detections(detections, frame.source)
+        model_analysis_text = (
+            f"{prediction.announcement}\n{prediction.recommendation}"
+            if detections
+            else prediction.announcement
+        )
         self._last_state = {
             "risk": prediction.risk_level,
             "signals": list(prediction.signals),
@@ -235,31 +303,31 @@ class AmbientWatchService:
             "source": frame.source,
             "announcement": prediction.announcement,
             "recommendation": prediction.recommendation,
+            "model_analysis": model_analysis_text,
+            "safety_gate_signals": list(prediction.signals),
+            "safety_gate_recommendation": prediction.recommendation,
             "ts": now,
         }
 
         triggered = any(item["label"] in _ALERT_TRIGGERS for item in detections)
         if prediction.risk_level in _WATCH_ALERT_LEVELS and triggered:
-            fingerprint = (
-                prediction.risk_level,
-                tuple(sorted(item["label"] for item in detections)),
+            self._hub.publish(
+                {
+                    "kind": "camera_alert",
+                    "tool": "ambient_watchdog",
+                    "status": prediction.risk_level,
+                    "risk": prediction.risk_level,
+                    "location": "camera",
+                    "source": frame.source,
+                    "detections": detections,
+                    "motion_score": round(motion, 4),
+                    "announcement": prediction.announcement,
+                    "model_analysis": model_analysis_text,
+                    "safety_gate_signals": list(prediction.signals),
+                    "safety_gate_recommendation": prediction.recommendation,
+                    "ts": now,
+                }
             )
-            if fingerprint != self._prev_fingerprint:
-                self._prev_fingerprint = fingerprint
-                self._hub.publish(
-                    {
-                        "kind": "camera_alert",
-                        "tool": "ambient_watchdog",
-                        "status": prediction.risk_level,
-                        "risk": prediction.risk_level,
-                        "location": "camera",
-                        "source": frame.source,
-                        "detections": detections,
-                        "motion_score": round(motion, 4),
-                        "announcement": prediction.announcement,
-                        "ts": now,
-                    }
-                )
         return prediction
 
     async def run(self) -> None:

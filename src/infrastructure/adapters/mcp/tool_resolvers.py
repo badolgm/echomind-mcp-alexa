@@ -14,7 +14,7 @@ import time
 from binascii import Error as Base64Error
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 from uuid import uuid4
 
 from src.domain.models.intent import Modality
@@ -25,13 +25,19 @@ from src.infrastructure.adapters.mcp.fastapi_mcp_adapter import (
     InMemoryMCPServer,
     ToolHandler,
 )
+from src.infrastructure.adapters.mcp.memory_resolvers import (
+    MEMORY_TOOL_NAMES,
+    build_memory_resolver,
+)
 from src.infrastructure.config.event_hub import EventHub
+from src.infrastructure.services.sensor_bus import SensorReading, read_sensors
 
 if TYPE_CHECKING:
     from src.infrastructure.adapters.iot.vivotek_adapter import (
         CameraFrame,
         CameraFrameSource,
     )
+    from src.infrastructure.services.memory_service import VectorMemoryService
 
 _MEDIA_PROMPTS: dict[str, str] = {
     "analyze_image_context": (
@@ -149,6 +155,7 @@ _HIGH_RULES: tuple[tuple[str, str], ...] = (
     ("unknown person", "unknown person"),
     ("break-in", "forced entry"),
     ("forced entry", "forced entry"),
+    ("needs help", "elderly needs help"),
 )
 _MEDIUM_RULES: tuple[tuple[str, str], ...] = (
     ("unattended pet", "unattended pet"),
@@ -189,16 +196,19 @@ _DETECTION_TERMS: tuple[tuple[str, tuple[str, ...], float], ...] = (
             "person",
             "human",
             "someone",
-            "elderly",
-            "elder",
             "man",
             "woman",
-            "grandma",
-            "grandpa",
+            "child",
+            "kid",
         ),
         0.88,
     ),
-    ("PET", ("pet", "dog", "cat", "animal"), 0.90),
+    (
+        "PERSON_ELDERLY",
+        ("elderly", "elder", "grandma", "grandpa", "abuelo", "anciano"),
+        0.94,
+    ),
+    ("PET", ("pet", "dog", "cat", "animal", "mascota", "perro", "gato"), 0.90),
     ("PACKAGE", ("package", "parcel", "box"), 0.80),
     ("LAPTOP", ("laptop", "computer"), 0.75),
     (
@@ -206,7 +216,67 @@ _DETECTION_TERMS: tuple[tuple[str, tuple[str, ...], float], ...] = (
         ("intruder", "stranger", "intrusion", "unknown person", "break-in"),
         0.90,
     ),
+    (
+        "GATE_OPEN",
+        (
+            "gate open",
+            "gate is open",
+            "the gate is open",
+            "open gate",
+            "reja abierta",
+            "la reja está abierta",
+            "reja",
+        ),
+        0.92,
+    ),
+    (
+        "DOOR_OPEN",
+        (
+            "door open",
+            "door is open",
+            "the door is open",
+            "open door",
+            "puerta abierta",
+            "la puerta está abierta",
+        ),
+        0.92,
+    ),
 )
+
+
+def combine_vision_with_baseline(
+    detections: tuple[dict[str, object], ...],
+    reading: SensorReading,
+) -> tuple[dict[str, object], ...]:
+    """Merge canonical vision labels with physical sensor truth (no crossed states).
+
+    The gate/door reed contacts are authoritative, so vision can never open a
+    door that the sensor reports closed nor fold a gate into a door
+    (Reja != Puerta): a vision ``GATE_OPEN`` is dropped when the gate contact is
+    closed, and vice versa. ``PET_ESCAPING`` is only produced when the gate is
+    physically open AND the pet collar is near the exit.
+    """
+    labels = {str(item["label"]): float(item["confidence"]) for item in detections}
+
+    if reading.gate_open:
+        labels["GATE_OPEN"] = max(labels.get("GATE_OPEN", 0.0), 0.9)
+        if not reading.door_open:
+            labels.pop("DOOR_OPEN", None)
+    if reading.door_open:
+        labels["DOOR_OPEN"] = max(labels.get("DOOR_OPEN", 0.0), 0.88)
+        if not reading.gate_open:
+            labels.pop("GATE_OPEN", None)
+    if (
+        reading.gate_open
+        and reading.pet_proximity >= 0.5
+        and labels.get("PET", 0.0) >= 0.5
+    ):
+        labels["PET_ESCAPING"] = 0.85
+
+    return tuple(
+        {"label": label, "confidence": round(confidence, 2)}
+        for label, confidence in labels.items()
+    )
 
 
 def extract_detections(text: str) -> tuple[dict[str, object], ...]:
@@ -294,7 +364,9 @@ def build_ambient_resolver(
             f"- safety gate recommendation: {verdict.recommendation}\n"
             f"- model analysis: {response.text}"
         )
-        detections = extract_detections(report)
+        detections = combine_vision_with_baseline(
+            extract_detections(report), read_sensors(time.time())
+        )
         if detections:
             labels = ", ".join(
                 f"{item['label']} [{item['confidence']:.2f}]" for item in detections
@@ -313,6 +385,10 @@ def build_ambient_resolver(
                     "location": location,
                     "source": source,
                     "detections": [dict(item) for item in detections],
+                    "model_analysis": response.text,
+                    "safety_gate_signals": list(verdict.signals),
+                    "safety_gate_recommendation": verdict.recommendation,
+                    "announcement": "",
                     "ts": time.time(),
                 }
             )
@@ -440,6 +516,8 @@ def build_agentic_tool_registry(
     llm_service: LLMServicePort,
     camera: CameraFrameSource | None = None,
     event_hub: EventHub | None = None,
+    memory: VectorMemoryService | None = None,
+    current_state_provider: Callable[[], Mapping[str, Any]] | None = None,
 ) -> InMemoryMCPServer:
     """Compose the default agentic tool registry for the ecosystem."""
     registry = InMemoryMCPServer()
@@ -457,6 +535,11 @@ def build_agentic_tool_registry(
         elif agent_tool.name == _AMBIENT_TOOL_NAME:
             registry.register_agent_tool(
                 agent_tool, build_ambient_resolver(llm_service, camera, event_hub)
+            )
+        elif agent_tool.name in MEMORY_TOOL_NAMES:
+            registry.register_agent_tool(
+                agent_tool,
+                build_memory_resolver(agent_tool.name, memory, current_state_provider),
             )
         else:
             registry.register_agent_tool(agent_tool, _echo_resolver)

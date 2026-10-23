@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 940" font-family="Segoe UI, Arial, sans-serif" role="img" aria-label="EchoMind A7C query router: deterministic precedence table deciding current state versus memory recall">
+  <defs>
+    <linearGradient id="bg4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0f19"/>
+      <stop offset="1" stop-color="#101a2c"/>
+    </linearGradient>
+    <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7dd3fc"/>
+    </marker>
+    <marker id="a4g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4ade80"/>
+    </marker>
+    <marker id="a4o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f59e0b"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="940" fill="url(#bg4)"/>
+  <text x="50" y="58" fill="#f8fafc" font-size="34" font-weight="700">EchoMind A7C — Query Router</text>
+  <text x="50" y="88" fill="#94a3b8" font-size="16">Every question leaves as exactly one of two domains · route_query() is a pure function of the text</text>
+
+  <rect x="560" y="120" width="280" height="86" rx="14" fill="#16233c" stroke="#38bdf8" stroke-width="2"/>
+  <text x="700" y="156" fill="#f8fafc" font-size="18" font-weight="700" text-anchor="middle">question</text>
+  <text x="700" y="182" fill="#7dd3fc" font-size="13" text-anchor="middle">route_query(text, lang?)</text>
+
+  <line x1="700" y1="206" x2="700" y2="250" stroke="#7dd3fc" stroke-width="2" marker-end="url(#a4)"/>
+
+  <!-- Precedence column -->
+  <rect x="120" y="250" width="580" height="520" rx="14" fill="#0f1a2e" stroke="#22d3ee" stroke-width="1.6"/>
+  <text x="150" y="284" fill="#67e8f9" font-size="16" font-weight="700">Precedence — first match wins</text>
+
+  <rect x="150" y="302" width="520" height="56" rx="9" fill="#141326" stroke="#f59e0b"/>
+  <text x="170" y="328" fill="#fcd34d" font-size="14" font-weight="700">1 · count</text>
+  <text x="170" y="348" fill="#cbd5e1" font-size="12">_COUNT_MARKER: ¿cuántos… eventos? / how many… events?</text>
+
+  <rect x="150" y="366" width="520" height="56" rx="9" fill="#141326" stroke="#f59e0b"/>
+  <text x="170" y="392" fill="#fcd34d" font-size="14" font-weight="700">2 · memory-anchor</text>
+  <text x="170" y="412" fill="#cbd5e1" font-size="12">_MEMORY_ANCHORS: dónde / where / quién / who / en el lugar</text>
+
+  <rect x="150" y="430" width="520" height="56" rx="9" fill="#141326" stroke="#f59e0b"/>
+  <text x="170" y="456" fill="#fcd34d" font-size="14" font-weight="700">3 · past</text>
+  <text x="170" y="476" fill="#cbd5e1" font-size="12">_PAST_MARKERS: cuándo · antes · dejó · viste · last · before · after</text>
+
+  <rect x="150" y="494" width="520" height="112" rx="9" fill="#0f2a2f" stroke="#4ade80"/>
+  <text x="170" y="520" fill="#86efac" font-size="14" font-weight="700">4 · subject + present  →  CURRENT_STATE</text>
+  <text x="170" y="542" fill="#cbd5e1" font-size="12">_STATE_SUBJECTS: gate · door · motion · temperature · risk · smoke</text>
+  <text x="170" y="562" fill="#cbd5e1" font-size="12">AND _PRESENT_MARKERS: está · hay · ahora · is · now · open · closed</text>
+  <text x="170" y="584" fill="#94a3b8" font-size="12">person veto: alguien/nadie blocks gate/door — never motion</text>
+
+  <rect x="150" y="614" width="520" height="56" rx="9" fill="#0f2a2f" stroke="#4ade80"/>
+  <text x="170" y="640" fill="#86efac" font-size="14" font-weight="700">5 · overview  →  CURRENT_STATE (OVERVIEW)</text>
+  <text x="170" y="660" fill="#cbd5e1" font-size="12">qué ocurre / qué pasa / what's happening / right now</text>
+
+  <rect x="150" y="678" width="520" height="70" rx="9" fill="#141326" stroke="#f59e0b"/>
+  <text x="170" y="704" fill="#fcd34d" font-size="14" font-weight="700">6 · default  →  RECALL (safe default)</text>
+  <text x="170" y="724" fill="#cbd5e1" font-size="12">no present-state signal → memory pipelines run exactly as before A7C</text>
+  <text x="170" y="742" fill="#64748b" font-size="11">empty text → RECALL (matched: "empty")</text>
+
+  <!-- Right: two destinations -->
+  <rect x="780" y="250" width="280" height="230" rx="14" fill="#12261b" stroke="#4ade80" stroke-width="2"/>
+  <text x="920" y="284" fill="#86efac" font-size="16" font-weight="700" text-anchor="middle">CURRENT_STATE</text>
+  <text x="800" y="312" fill="#e2e8f0" font-size="12">QueryKind.CURRENT_STATE</text>
+  <text x="800" y="336" fill="#cbd5e1" font-size="12">render_state_answer(topic,</text>
+  <text x="800" y="356" fill="#cbd5e1" font-size="12">   watch.last_state, polarity)</text>
+  <text x="800" y="384" fill="#94a3b8" font-size="12">from snapshot fields ONLY:</text>
+  <text x="800" y="404" fill="#94a3b8" font-size="12">gate_open · door_open ·</text>
+  <text x="800" y="424" fill="#94a3b8" font-size="12">temperature_c · risk · detections</text>
+  <text x="800" y="452" fill="#fca5a5" font-size="12">never touches the store</text>
+  <text x="800" y="472" fill="#94a3b8" font-size="11">missing field → honest "No dispongo"</text>
+
+  <rect x="780" y="510" width="280" height="260" rx="14" fill="#2a1c0f" stroke="#f59e0b" stroke-width="2"/>
+  <text x="920" y="544" fill="#fcd34d" font-size="16" font-weight="700" text-anchor="middle">RECALL</text>
+  <text x="800" y="572" fill="#e2e8f0" font-size="12">QueryKind.RECALL</text>
+  <text x="800" y="596" fill="#cbd5e1" font-size="12">V1 MemoryIntentClassifier +</text>
+  <text x="800" y="616" fill="#cbd5e1" font-size="12">V2 understand()/RecallEngine</text>
+  <text x="800" y="644" fill="#94a3b8" font-size="12">last_seen · search · summary</text>
+  <text x="800" y="664" fill="#94a3b8" font-size="12">top · high · critical · count</text>
+  <text x="800" y="684" fill="#94a3b8" font-size="12">planner relations / plan ops</text>
+  <text x="800" y="712" fill="#94a3b8" font-size="12">route decision carries matched[]</text>
+  <text x="800" y="732" fill="#cbd5e1" font-size="12">→ RouteDecision.matched trace</text>
+  <text x="800" y="758" fill="#64748b" font-size="11">unchanged pre-A7C behaviour</text>
+
+  <!-- RouteDecision output -->
+  <rect x="1110" y="330" width="240" height="340" rx="14" fill="#0e1626" stroke="#a78bfa" stroke-width="1.8"/>
+  <text x="1230" y="362" fill="#c4b5fd" font-size="15" font-weight="700" text-anchor="middle">RouteDecision</text>
+  <text x="1130" y="392" fill="#e2e8f0" font-size="12">kind: QueryKind</text>
+  <text x="1130" y="414" fill="#e2e8f0" font-size="12">topic: StateTopic | None</text>
+  <text x="1130" y="436" fill="#e2e8f0" font-size="12">lang: str</text>
+  <text x="1130" y="458" fill="#e2e8f0" font-size="12">matched: tuple[str, ...]</text>
+  <text x="1130" y="480" fill="#e2e8f0" font-size="12">polarity: str | None</text>
+  <text x="1130" y="512" fill="#94a3b8" font-size="12">polarity ("open"/"closed")</text>
+  <text x="1130" y="532" fill="#94a3b8" font-size="12">only selects the Sí/No prefix</text>
+  <text x="1130" y="552" fill="#94a3b8" font-size="12">— the reported fact never</text>
+  <text x="1130" y="572" fill="#94a3b8" font-size="12">changes</text>
+  <text x="1130" y="604" fill="#67e8f9" font-size="12">StateTopics:</text>
+  <text x="1130" y="624" fill="#cbd5e1" font-size="11">GATE · DOOR · MOTION</text>
+  <text x="1130" y="642" fill="#cbd5e1" font-size="11">TEMPERATURE · RISK · SMOKE</text>
+  <text x="1130" y="660" fill="#cbd5e1" font-size="11">OVERVIEW</text>
+
+  <!-- Arrows destination -->
+  <path d="M700,380 L780,365" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#a4g)"/>
+  <path d="M700,640 L780,640" fill="none" stroke="#f59e0b" stroke-width="2" marker-end="url(#a4o)"/>
+  <line x1="1060" y1="365" x2="1110" y2="430" stroke="#7dd3fc" stroke-width="1.6" marker-end="url(#a4)"/>
+  <line x1="1060" y1="640" x2="1110" y2="560" stroke="#7dd3fc" stroke-width="1.6" marker-end="url(#a4)"/>
+
+  <!-- Fix callout -->
+  <rect x="120" y="800" width="1230" height="105" rx="14" fill="#0b0f19" stroke="#22d3ee" stroke-width="1"/>
+  <text x="140" y="832" fill="#67e8f9" font-size="15" font-weight="700">A7C fix: “¿La reja está cerrada?”</text>
+  <text x="140" y="860" fill="#cbd5e1" font-size="13">Before: routed to history → “No he encontrado recuerdos para: …” (wrong truth source).</text>
+  <text x="140" y="884" fill="#cbd5e1" font-size="13">After: subject “reja” + present “cerrada” + polarity “closed” → CURRENT_STATE → render_state_answer → honest live answer.</text>
+  <text x="140" y="906" fill="#64748b" font-size="11">router uses MemoryIntentClassifier only for language detection, so history and state paths always agree on es/en.</text>
+</svg>

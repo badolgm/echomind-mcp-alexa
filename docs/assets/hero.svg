@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Segoe UI, Arial, sans-serif" role="img" aria-label="EchoMind V2 overview: Alexa+ question routed to live state or historical memory">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0f19"/>
+      <stop offset="1" stop-color="#111a2e"/>
+    </linearGradient>
+    <linearGradient id="route" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#3b82f6"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7dd3fc"/>
+    </marker>
+    <marker id="arrowDim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#bg)"/>
+
+  <text x="60" y="70" fill="#f8fafc" font-size="40" font-weight="700">EchoMind V2</text>
+  <text x="60" y="102" fill="#94a3b8" font-size="19">Memory-first home ecosystem · deterministic · bilingual · 24/7 without AWS</text>
+  <text x="60" y="130" fill="#64748b" font-size="15">One question → one of two truth sources → one honest answer</text>
+
+  <rect x="60" y="300" width="180" height="120" rx="14" fill="#16233c" stroke="#38bdf8" stroke-width="2"/>
+  <text x="150" y="352" fill="#f8fafc" font-size="20" font-weight="600" text-anchor="middle">Alexa+</text>
+  <text x="150" y="380" fill="#94a3b8" font-size="13" text-anchor="middle">natural-language</text>
+  <text x="150" y="398" fill="#94a3b8" font-size="13" text-anchor="middle">question</text>
+
+  <rect x="300" y="300" width="200" height="120" rx="14" fill="#16233c" stroke="#38bdf8" stroke-width="2"/>
+  <text x="400" y="348" fill="#f8fafc" font-size="19" font-weight="600" text-anchor="middle">MCP server</text>
+  <text x="400" y="374" fill="#7dd3fc" font-size="13" text-anchor="middle">Streamable HTTP /mcp</text>
+  <text x="400" y="396" fill="#94a3b8" font-size="12" text-anchor="middle">tools/call · memory_converse</text>
+  <text x="400" y="412" fill="#94a3b8" font-size="12" text-anchor="middle">memory_recall</text>
+
+  <rect x="560" y="290" width="210" height="140" rx="14" fill="#0f2a2f" stroke="#22d3ee" stroke-width="2.5"/>
+  <text x="665" y="336" fill="#f8fafc" font-size="20" font-weight="700" text-anchor="middle">Query Router</text>
+  <text x="665" y="362" fill="#67e8f9" font-size="13" text-anchor="middle">route_query()</text>
+  <text x="665" y="384" fill="#94a3b8" font-size="12" text-anchor="middle">deterministic tables</text>
+  <text x="665" y="402" fill="#94a3b8" font-size="12" text-anchor="middle">no LLM · no wall clock</text>
+
+  <rect x="850" y="150" width="360" height="140" rx="14" fill="#12213b" stroke="#4ade80" stroke-width="2"/>
+  <text x="1030" y="190" fill="#f8fafc" font-size="19" font-weight="700" text-anchor="middle">Current State</text>
+  <text x="1030" y="216" fill="#86efac" font-size="13" text-anchor="middle">render_state_answer(topic, watch.last_state)</text>
+  <text x="1030" y="240" fill="#94a3b8" font-size="12" text-anchor="middle">gate · door · motion · temperature · risk · smoke</text>
+  <text x="1030" y="262" fill="#94a3b8" font-size="12" text-anchor="middle">reads live snapshot ONLY — never the store</text>
+
+  <rect x="850" y="430" width="360" height="170" rx="14" fill="#12213b" stroke="#f59e0b" stroke-width="2"/>
+  <text x="1030" y="470" fill="#f8fafc" font-size="19" font-weight="700" text-anchor="middle">Memory Recall</text>
+  <text x="1030" y="496" fill="#fcd34d" font-size="13" text-anchor="middle">recall() → RecallEngine</text>
+  <text x="1030" y="520" fill="#94a3b8" font-size="12" text-anchor="middle">plan → retrieve → relate → context → synthesize</text>
+  <text x="1030" y="542" fill="#94a3b8" font-size="12" text-anchor="middle">answers from retrieved evidence + audit trace</text>
+  <text x="1030" y="570" fill="#94a3b8" font-size="12" text-anchor="middle">vector memory store (local, no network)</text>
+  <text x="1030" y="590" fill="#64748b" font-size="11" text-anchor="middle">VectorMemoryService</text>
+
+  <rect x="850" y="630" width="360" height="60" rx="12" fill="#1b1730" stroke="#64748b" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="1030" y="656" fill="#cbd5e1" font-size="13" text-anchor="middle">AWS Bedrock LLM (optional)</text>
+  <text x="1030" y="676" fill="#94a3b8" font-size="12" text-anchor="middle">multimodal tools only · NOT in the memory path · Quota Fallback</text>
+
+  <rect x="300" y="560" width="560" height="110" rx="14" fill="#101b30" stroke="#334155" stroke-width="1.5"/>
+  <text x="580" y="596" fill="#f8fafc" font-size="17" font-weight="600" text-anchor="middle">Ingestion (always running)</text>
+  <text x="580" y="622" fill="#94a3b8" font-size="13" text-anchor="middle">Android / Vivotek cameras + sensors → AmbientWatchService →</text>
+  <text x="580" y="644" fill="#94a3b8" font-size="13" text-anchor="middle">EventHub (camera_alert) → MemoryBridge → VectorMemoryService</text>
+
+  <line x1="240" y1="360" x2="300" y2="360" stroke="#7dd3fc" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="500" y1="360" x2="560" y2="330" stroke="#7dd3fc" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="770" y1="330" x2="850" y2="240" stroke="url(#route)" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="770" y1="400" x2="850" y2="500" stroke="url(#route)" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="860" y1="572" x2="860" y2="620" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrowDim)"/>
+  <path d="M580,560 L580,470 L850,470" fill="none" stroke="#f59e0b" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+  <text x="700" y="462" fill="#fcd34d" font-size="12">stored records feed recall</text>
+
+  <text x="960" y="330" fill="#86efac" font-size="12">present</text>
+  <text x="960" y="520" fill="#fcd34d" font-size="12">past</text>
+</svg>
