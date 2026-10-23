@@ -1,33 +1,31 @@
 # JUDGE_QUICK_START.md
 
-## EchoMind en 5 minutos
+## EchoMind in 5 Minutes
 
-### ¿Qué es?
-EchoMind es una **memoria episódica evidencia-first** para el hogar. Recuerda hechos observados por cámaras/sensores y responde reconstruyendo, relacionando, ordenando y narrando con base en evidencia auditable.
+### What is it?
+EchoMind is an evidence-first episodic memory system for the home. It remembers facts observed by cameras and sensors, and answers by reconstructing, relating, ordering, and narrating based on auditable evidence.
 
-### Diferenciador clave
-- **No es chatbot**: No memoriza conversación, recuerda **eventos** persistidos
-- **Evidencia-first**: Cada respuesta muestra `evidence` + `trace`
-- **Dos caminos**: `CURRENT_STATE` (snapshot vivo) vs `RECALL` (histórico)
-- **Determinista**: Mayoría sin LLM para recordar; auditable
-- **Honesto**: Se abstiene si no hay evidencia
+### Key Differentiator
+- Not a chatbot: It does not memorize conversation; it remembers persisted events
+- Evidence-first: Every response shows evidence + trace
+- Two paths: CURRENT_STATE (live snapshot) vs RECALL (historical)
+- Deterministic: Majority without LLM for recall; auditable
+- Honest: Abstains when evidence is insufficient
 
-### Arquitectura en pocas palabras
-```
-Sensores/Cámaras → Watchdog → EventHub → MemoryBridge → VectorMemoryService
-Pregunta → Query Router → (CURRENT_STATE | RECALL Engine) → Respuesta + evidence + trace
-```
+### Architecture in Brief
+Sensors/Cameras -> Watchdog -> EventHub -> MemoryBridge -> VectorMemoryService
+Question -> Query Router -> (CURRENT_STATE | RECALL Engine) -> Response + evidence + trace
 
-### Demo rápido (3 preguntas)
-1. *"¿La reja está cerrada?"* → Estado vivo (Query Router)
-2. *"¿Qué ocurrió antes de la caída?"* → Timeline + Relations + evidencia
-3. *"¿Qué cámaras observaron el mismo evento?"* → Trazabilidad
+### Quick Demo (3 Questions)
+1. Is the gate closed? -> Live state (Query Router)
+2. What happened before the fall? -> Timeline + Relations + evidence
+3. Which cameras observed the same event? -> Traceability
 
-### Documentación clave
-- `README.md` - Visión general
-- `ECHOMIND_V2_MEMORY_FIRST_ARCHITECTURE.md` - Arquitectura memoria
-- `A7C_QUERY_ROUTER_ARCHITECTURE.md` - Router
-- `A7D_IMPLEMENTATION_REPORT.md` - Response Intent Adapter
+### Key Documentation
+- README.md - Overview
+- docs/architecture/ECHOMIND_V2_MEMORY_FIRST_ARCHITECTURE.md - Memory architecture
+- docs/implementation/A7C_QUERY_ROUTER_ARCHITECTURE.md - Router
+- docs/implementation/A7D_IMPLEMENTATION_REPORT.md - Response Intent Adapter
 
 ### Tests
-700 tests PASS
+641 tests pass (635 unit + 6 integration). 9 collection errors from missing boto3/botocore modules (environment dependency, not code regression).
